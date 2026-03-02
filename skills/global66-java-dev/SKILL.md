@@ -106,81 +106,54 @@ for the full audit workflow and output format.
 ### Presentation Layer
 
 ```java
-// Interface
 public interface UserController {
     UserResponse getUser(@PathVariable Integer userId);
 }
 
-// Implementation
-@Slf4j
-@RestController
-@RequiredArgsConstructor
+@Slf4j @RestController @RequiredArgsConstructor
 @RequestMapping("/ms-name/iuse/users")
 public class UserControllerImpl implements UserController {
     private final UserService userService;
 
     @GetMapping("/{userId}")
     public UserResponse getUser(@PathVariable Integer userId) {
-        return UserPresentationMapper.INSTANCE.toResponse(
-            userService.findUser(userId));
+        return UserPresentationMapper.INSTANCE.toResponse(userService.findUser(userId));
     }
 }
 ```
 
-- Response DTOs: prefer `record` for immutable responses
-- Request DTOs: `@Data` class with `@NotNull`/`@NotBlank` + `@JsonProperty`
-- Always use `@Schema` (OpenAPI) on DTOs for documentation
+- Response: `record` · Request: `@Data` with `@NotNull`/`@NotBlank` · DTOs: `@Schema`
 
 ### Business Layer
 
 ```java
-// Interface
-public interface CreateUserService {
-    UserData createUser(UserData userData);
-}
+public interface CreateUserService { UserData createUser(UserData userData); }
 
-// Implementation
-@Slf4j
-@Service
-@RequiredArgsConstructor
+@Slf4j @Service @RequiredArgsConstructor
 public class CreateUserServiceImpl implements CreateUserService {
     private final UserPersistence userPersistence;
     private final NotificationService notificationService;
 
-    @Override
-    @Transactional(rollbackFor = Exception.class)
+    @Override @Transactional(rollbackFor = Exception.class)
     public UserData createUser(UserData userData) {
         ensureUserDoesNotExist(userData.getEmail());
         UserData saved = userPersistence.save(userData);
         notificationService.notifyWelcome(saved);
         return saved;
     }
-
-    private void ensureUserDoesNotExist(String email) {
-        if (userPersistence.existsByEmail(email)) {
-            throw userAlreadyExistsException(email);
-        }
-    }
-
-    private RuntimeException userAlreadyExistsException(String email) {
-        return new BusinessException(ErrorCode.USER_ALREADY_EXISTS, email);
-    }
+    private void ensureUserDoesNotExist(String email) { ... }
 }
 ```
 
 ### Persistence Layer
 
 ```java
-// Interface
 public interface UserPersistence {
     UserData save(UserData userData);
     Optional<UserData> findById(Integer id);
-    boolean existsByEmail(String email);
 }
 
-// Implementation
-@Component
-@RequiredArgsConstructor
+@Component @RequiredArgsConstructor
 public class UserPersistenceImpl implements UserPersistence {
     private final UserRepository userRepository;
 
@@ -189,11 +162,8 @@ public class UserPersistenceImpl implements UserPersistence {
         UserEntity entity = UserMapper.INSTANCE.toEntity(userData);
         return UserMapper.INSTANCE.toData(userRepository.save(entity));
     }
-
     @Override
-    public Optional<UserData> findById(Integer id) {
-        return userRepository.findById(id).map(UserMapper.INSTANCE::toData);
-    }
+    public Optional<UserData> findById(Integer id) { ... }
 }
 ```
 
@@ -227,28 +197,24 @@ For the complete file-by-file generation guide (all 9 files + 3 config updates),
 **Key patterns:**
 
 ```java
-// Retrofit Api interface (client/rest/api/)
+// Retrofit Api interface
 public interface MapBoxApi {
     @Headers("Accept: application/json")
     @POST("api/v1/geocode")
-    Call<MapBoxResponseDto> createMapBox(
-        @Header("Authorization") String token,
-        @Body MapBoxRequestDto mapBoxRequestDto);
+    Call<MapBoxResponseDto> createMapBox(@Header("Authorization") String token, @Body MapBoxRequestDto dto);
 }
 
-// Client implementation (client/rest/impl/) — @Component, not @Service
-@Component
-@RequiredArgsConstructor
+// Client implementation — @Component (not @Service)
+@Component @RequiredArgsConstructor
 public class MapBoxClientImpl implements MapBoxClient {
     private final MapBoxApi mapBoxApi;
 
     @Override
-    public MapBoxResponse createMapBox(String token, MapBoxRequest mapBoxRequest) {
-        MapBoxRequestDto dto = MapBoxRequestClientMapper.INSTANCE.toDto(mapBoxRequest);
+    public MapBoxResponse createMapBox(String token, MapBoxRequest request) {
+        MapBoxRequestDto dto = MapBoxRequestClientMapper.INSTANCE.toDto(request);
         Call<MapBoxResponseDto> call = mapBoxApi.createMapBox(token, dto);
         Response<MapBoxResponseDto> response = checkCallExecute(call, HTTP_CLIENT_COMPONENT);
-        MapBoxResponseDto responseDto = checkResponse(response, HTTP_CLIENT_COMPONENT);
-        return MapBoxResponseClientMapper.INSTANCE.toModel(responseDto);
+        return MapBoxResponseClientMapper.INSTANCE.toModel(checkResponse(response, HTTP_CLIENT_COMPONENT));
     }
 }
 ```
@@ -284,32 +250,28 @@ For full details and examples, see `references/srp-patterns.md`.
 - **Forbidden names**: `process`, `handle`, `execute`, `validate`, `check` — always be specific
 
 ```java
-// BAD: everything inline, generic name, direct repository, inline exceptions
+// BAD: generic name, direct repository, inline exceptions
 public void processUser(UserData data) { ... }
 
-// GOOD: public method orchestrates, private methods do one thing
+// GOOD: orchestration + semantic private methods
 public void registerUser(UserData data) {
     ensureEmailIsAvailable(data.getEmail());
-    ensureUserIsAdult(data.getAge());
     userPersistence.save(data);
 }
 private void ensureEmailIsAvailable(String email) {
-    if (userPersistence.existsByEmail(email)) throw emailAlreadyRegisteredException(email);
-}
-private boolean isUnderage(int age) { return age < 18; }
-private RuntimeException emailAlreadyRegisteredException(String email) {
-    return new BusinessException(ErrorCode.EMAIL_ALREADY_REGISTERED, email);
+    if (userPersistence.existsByEmail(email)) {
+        throw new BusinessException(ErrorCode.EMAIL_ALREADY_REGISTERED, email);
+    }
 }
 ```
 
 ## Entities
 
 ```java
-@Entity
+@Entity @Getter @Setter
 @Table(name = "user",
     indexes = { @Index(name = "IDX_USER_EMAIL", columnList = "email") })
 @Comment("User entity for core domain")
-@Getter @Setter
 public class UserEntity {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "id") private Integer id;
@@ -320,10 +282,6 @@ public class UserEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 50)
     private UserStatusEnum status;
-
-    @CreationTimestamp
-    @Column(name = "created_at", nullable = false)
-    private LocalDateTime createdAt;
 }
 ```
 
@@ -462,9 +420,8 @@ public UserData createUser(UserData userData) {
 ### Log Compliance Review (git diff)
 
 When a user provides a `git diff` for log review, read `references/logging.md` for the
-full compliance check and output format. Analyze all lines starting with `+`, classify
-each violation by category (`SECURITY | FORMAT | ARCHITECTURE | NOISE`) and severity
-(`CRITICAL | WARNING`), and provide corrected code for each.
+full compliance check and output format. Analyze lines starting with `+`, classify by
+category (`SECURITY | FORMAT | ARCHITECTURE | NOISE`) and severity (`CRITICAL | WARNING`).
 
 ## Swagger / OpenAPI Documentation
 
@@ -481,14 +438,12 @@ public interface PaymentController {
 
     @ErrorResponses(values = {
         @ErrorResponse(reason = ErrorReason.NOT_FOUND, source = ErrorSource.BUSINESS_SERVICE),
-        @ErrorResponse(reason = ErrorReason.CONFLICT,  source = ErrorSource.HTTP_CLIENT_COMPONENT)
+        @ErrorResponse(reason = ErrorReason.CONFLICT, source = ErrorSource.HTTP_CLIENT_COMPONENT)
     })
-    @Operation(summary = "Process a payment",
-               description = "Validates and persists a new payment transaction")
+    @Operation(summary = "Process a payment", description = "Validates and persists a new payment")
     @SecurityRequirement(name = "authB2C")
     PaymentResponse createPayment(
-        @Parameter(description = "Authenticated user email", required = true,
-                   example = "user@global66.com")
+        @Parameter(description = "User email", required = true, example = "user@global66.com")
             @RequestHeader("Claim-Email") String email,
         @RequestBody @Valid PaymentRequest request);
 }
@@ -497,20 +452,16 @@ public interface PaymentController {
 ### DTO annotations
 
 ```java
-// Request class
 @Data
-@Schema(name = "PaymentRequest", description = "Payload for creating a payment",
-        example = "{\"amount\": 1000, \"currency\": \"CLP\"}")
+@Schema(name = "PaymentRequest", description = "Payload for creating a payment")
 public class PaymentRequest {
-    @Schema(description = "Amount to transfer", requiredMode = Schema.RequiredMode.REQUIRED,
-            example = "1000")
+    @Schema(description = "Amount to transfer", requiredMode = REQUIRED, example = "1000")
     private BigDecimal amount;
 }
 
-// Response record
 public record PaymentResponse(
-    @Schema(description = "Generated transaction ID", example = "TXN-2024-001") String txnId,
-    @Schema(description = "Final transaction status", example = "COMPLETED") String status) {}
+    @Schema(description = "Transaction ID", example = "TXN-2024-001") String txnId,
+    @Schema(description = "Status", example = "COMPLETED") String status) {}
 ```
 
 ### application.yml (required)
@@ -524,7 +475,6 @@ springdoc:
 ```
 
 ### Security schemes: `authB2C` | `authB2B` | `authAdmin`
-Add `@Server` only for endpoints exposed on API Gateway.
 
 ## Liquibase YAML (G81-POL-033)
 
@@ -540,49 +490,10 @@ For full rules, Gold Standard examples, and audit format, see `references/liquib
 
 **Audit format:** see `references/liquibase.md` — violations list + corrected YAML.
 
-## Checklist Before Finishing Code
+## Pre-Entrega Checklist
 
-- [ ] No `@Entity` outside `persistence/` package
-- [ ] No repository injected directly into a service (use `*Persistence` port)
-- [ ] `@Transactional` only in business layer — never in persistence, controller, or client layers
-- [ ] `@Transactional` only on `public` methods (proxy bypass on private/protected)
-- [ ] Always `rollbackFor = Exception.class` on write operations
-- [ ] `readOnly = true` on `find*`/`fetch*`/`get*`/`list*` methods
-- [ ] No HTTP/external API calls inside a `@Transactional` block
-- [ ] No `this.method()` calls to another `@Transactional` method in the same bean
-- [ ] Methods returning `Stream<?>` collect inside the transaction before returning
-- [ ] All public methods: ≤10 lines, orchestration only
-- [ ] No `process/handle/execute/validate/check` as method names
-- [ ] Boolean conditions extracted to `is*`/`has*` methods
-- [ ] No inline `throw new` — use factory methods
-- [ ] MapStruct mapper per layer, with `INSTANCE` singleton and full `@Mapper(componentModel="default", ...)` config
-- [ ] API clients: `@Component` (not `@Service`) on `*ClientImpl`
-- [ ] API clients: domain objects in `domain/external_request/`, not `domain/data/`
-- [ ] API clients: two separate mappers (`*RequestClientMapper`, `*ResponseClientMapper`)
-- [ ] API clients: `checkCallExecute` + `checkResponse` from `RetrofitUtils`, no try/catch in impl
-- [ ] API clients: `RestClientConfig` + `EndpointsConfig` + `application-local.yml` updated
-- [ ] Tests use Given_When_Then naming and JSON fixtures
-- [ ] Controllers/listeners have START + END logs with relevant IDs
-- [ ] No PII, passwords, tokens, or full request bodies in logs
-- [ ] `log.error()` always includes exception object as last argument
-- [ ] Async executors use `ContextSnapshot` task decorator for MDC propagation
-- [ ] SQS: 4 traceability classes present (`SqsClientConfig`, `TracingMessageListenerWrapper`, `TracingSqsEndpoint`, `TracingSqsListenerAnnotationBeanPostProcessor`)
-- [ ] SQS consumers: catch `Exception` broadly to avoid retry storms
-- [ ] SQS producers: include `traceId` header from MDC
-- [ ] FIFO: `messageGroupId` + `messageDeduplicationId` set on every send
-- [ ] DLQ configured in AWS for each queue
-- [ ] Liquibase: file named `{yyyyMMddHHmmss}_{JIRA-TICKET}.yaml`
-- [ ] Tables: singular snake_case + `remarks` with MAE/TRX/DOM/TMP classification
-- [ ] All columns have `remarks`, PK/FK/UQ/IDX names follow G81-POL-033 convention
-- [ ] One concern per changeSet (no bundled createTable + indexes + FKs)
-- [ ] Swagger: all annotations on interface, zero on implementation
-- [ ] `@Tag(name, description)` on every controller interface
-- [ ] `@Operation(summary, description)` on every method
-- [ ] `@ErrorResponses` for methods that can throw business/client errors
-- [ ] `@SecurityRequirement` on protected endpoints
-- [ ] Request DTOs: `@Schema` at class level (name + description + example) and each field
-- [ ] Response records: `@Schema` on each component with description + example
-- [ ] No `RuntimeException` thrown directly — always `BusinessException(ErrorCode.XXX, ...)`
-- [ ] No cognitive complexity > 15 — extract to private methods with semantic naming
-- [ ] Tests: only new/modified methods from git diff, never overwrite existing tests
-- [ ] Tests: complex DTOs loaded from JSON fixtures, never constructed inline with setters
+Ver el checklist completo en `references/checklist.md` con 40+ ítems organizados por categoría:
+- Arquitectura (entities, streams, líneas por método)
+- @Transactional (layer, public, rollbackFor, readOnly, no external calls)
+- SRP & Naming (no métodos genéricos, factory exceptions, complejidad cognitiva)
+- MapStruct, API Clients, Testing, Logging, SQS, Liquibase, Swagger

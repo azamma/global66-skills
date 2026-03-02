@@ -4,7 +4,8 @@
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(gh api:*)",
       "Bash(curl:*)",
-      "Bash(claude plugin:*)"
+      "Bash(claude plugin:*)",
+      "Bash(wc:*)"
     ]
   }
 }
