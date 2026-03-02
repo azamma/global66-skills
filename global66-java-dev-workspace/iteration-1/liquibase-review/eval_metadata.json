@@ -1,0 +1,42 @@
+{
+  "eval_id": 7,
+  "eval_name": "liquibase-review",
+  "prompt": "Liquibase generó este YAML automáticamente. Revisalo y corregilo...",
+  "assertions": [
+    {
+      "name": "table-name-violation-detected",
+      "text": "Output identifies 'Customers' table name as violation (plural and/or CamelCase)",
+      "type": "reasoning"
+    },
+    {
+      "name": "remarks-missing-detected",
+      "text": "Output identifies missing remarks on the table (MAE/TRX/DOM/TMP classification) and/or columns",
+      "type": "reasoning"
+    },
+    {
+      "name": "bigint-type-violation-detected",
+      "text": "Output identifies BIGINT as incorrect type — should be INT",
+      "type": "string_match"
+    },
+    {
+      "name": "camelcase-column-detected",
+      "text": "Output identifies 'customerName' camelCase column as a violation (should be customer_name)",
+      "type": "string_match"
+    },
+    {
+      "name": "bundled-changeset-detected",
+      "text": "Output identifies that createIndex and addForeignKeyConstraint are bundled in the same changeSet as createTable",
+      "type": "reasoning"
+    },
+    {
+      "name": "corrected-yaml-has-separate-changesets",
+      "text": "Corrected YAML splits table creation, index, and FK into separate changeSets",
+      "type": "reasoning"
+    },
+    {
+      "name": "corrected-constraint-names",
+      "text": "Corrected YAML uses proper naming conventions: PK_customer_id, IDX_CUSTOMER_CUSTOMER_NAME (or similar), FK_CUSTOMER_ACCOUNT_ACCOUNT_ID (or similar)",
+      "type": "reasoning"
+    }
+  ]
+}

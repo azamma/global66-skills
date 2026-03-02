@@ -1,0 +1,42 @@
+{
+  "eval_id": 2,
+  "eval_name": "service-refactor",
+  "prompt": "Refactoriza este servicio...",
+  "assertions": [
+    {
+      "name": "ensure-method-extracted",
+      "text": "Output contains at least one private method with 'ensure' prefix (e.g., ensureUserExists, ensureBalanceSufficient)",
+      "type": "string_match"
+    },
+    {
+      "name": "no-inline-runtime-exception",
+      "text": "Output does NOT contain 'throw new RuntimeException' inline in the public method",
+      "type": "string_match_negative"
+    },
+    {
+      "name": "is-has-predicate-extracted",
+      "text": "Output contains a private boolean method with 'is' or 'has' prefix (e.g., isUserMissing, hasSufficientBalance)",
+      "type": "string_match"
+    },
+    {
+      "name": "exception-factory-method",
+      "text": "Output contains a private method that returns an exception (factory pattern, not inline throw)",
+      "type": "reasoning"
+    },
+    {
+      "name": "business-exception-used",
+      "text": "Output uses BusinessException (not RuntimeException) as the exception type",
+      "type": "string_match"
+    },
+    {
+      "name": "no-direct-repository",
+      "text": "Refactored service does NOT inject PaymentRepository or UserRepository directly — uses Persistence ports",
+      "type": "reasoning"
+    },
+    {
+      "name": "public-method-concise",
+      "text": "The main public method (processPayment or equivalent) is short — orchestrates calls to private methods without inline if-else logic",
+      "type": "reasoning"
+    }
+  ]
+}

@@ -1,0 +1,359 @@
+# Liquibase YAML Guidelines — Global66 (G81-POL-033)
+
+Stack: Liquibase · MySQL/Aurora · Spring Boot 3.x
+
+---
+
+## File Structure
+
+```
+src/main/resources/db/
+├── changelog/
+│   └── db.changelog-master.yaml   ← uses includeAll, never modify
+└── migrations/
+    └── {yyyyMMddHHmmss}_{JIRA-TICKET}.yaml
+```
+
+**Master changelog** — fixed, always the same:
+```yaml
+databaseChangeLog:
+  - includeAll:
+      path: db/migrations/
+```
+
+**Migration file naming**: timestamp + Jira ticket
+```
+20251217200708_GROW-562.yaml
+20251231200708_GROW-590.yaml
+```
+
+**ChangeSet ID format**: `{timestamp}-{sequential}` (e.g., `1766002045101-1`)
+**Author**: `{firstname.lastname}` or `{firstname.lastname} (generated)` if auto-generated
+
+---
+
+## Naming Conventions (G81-POL-033 — mandatory)
+
+| Object | Pattern | Example |
+|--------|---------|---------|
+| Table | `snake_case`, singular, no abbreviations | `device_permission`, `location_geocoding` |
+| Primary Key | `PK_{table}_{field}` | `PK_device_permission_id` |
+| Foreign Key | `FK_{origin}_{target}_{field}` | `FK_LOCATION_DEVICE_PERMISSION_DEVICE_ID` |
+| Index | `IDX_{table}_{column}` | `IDX_DEVICE_PERMISSION_STATUS` |
+| Unique constraint | `UQ_{table}_{column(s)}` | `UQ_DEVICE_PERMISSION_USER_ID_FINGERPRINT` |
+| Sequence | `SEQ_{table}_{correlative}` | `SEQ_customer_profile_01` |
+| Stored procedure | `sp_{name}` | `sp_calculate_fee` |
+| View | `view_{name}` | `view_active_customers` |
+| Function | `fn_{name}` | `fn_get_balance` |
+| Trigger | `tgr_{name}` | `tgr_audit_changes` |
+
+---
+
+## Table Classification — `remarks` (mandatory)
+
+Every table must have a `remarks` field at table level identifying its type:
+
+| Prefix | Type | Purpose |
+|--------|------|---------|
+| `MAE:` | Master | Reference/catalog data (relatively static) |
+| `TRX:` | Transactional | Business operations, events, logs |
+| `DOM:` | Domain | Business domain entities |
+| `TMP:` | Temporary | Processing, staging data |
+
+```yaml
+remarks: 'MAE: Device permission state and configuration'
+remarks: 'TRX: Location history records from devices with geolocation data'
+remarks: 'TRX: Audit log for device permission changes'
+```
+
+---
+
+## Column Rules
+
+- Every column **must** have a `remarks` field (description in English)
+- `NOT NULL` columns must have `constraints: nullable: false`
+- `nullable` is not required for nullable columns (omit the constraints block)
+- Auto-increment PK: `autoIncrement: true` + `nullable: false` + `primaryKey: true` + `primaryKeyName: PK_{table}_id`
+- Audit columns: every transactional/master table needs `created_at` (DATETIME, NOT NULL)
+
+---
+
+## Allowed Data Types
+
+| Use | Type | Notes |
+|-----|------|-------|
+| Primary key | `INT` | With `autoIncrement: true` |
+| Foreign key | `INT` | No autoIncrement |
+| Money/financial | `DECIMAL(19,2)` | Never FLOAT/DOUBLE for money |
+| Coordinates | `DECIMAL(9,6)` | Lat/Lon with 6 decimal places |
+| Short text | `VARCHAR(n)` | n appropriate to field content |
+| Fixed text | `CHAR(n)` | Country codes, fixed codes |
+| Timestamps | `DATETIME` | NOT `TIMESTAMP` (timezone issues) |
+| Raw JSON | `JSON` | For unstructured partner responses |
+| Enumerations | `ENUM('VAL1','VAL2')` | Uppercase values |
+| Boolean | `BIT(1)` | Not `TINYINT` or `BOOLEAN` |
+| Long text | `TEXT` | Only when VARCHAR exceeds limit |
+
+---
+
+## ChangeSet Granularity (one concern per changeSet)
+
+Split operations into separate changeSets — Liquibase often bundles everything in one, which is wrong:
+
+```yaml
+# ✅ CORRECT — one changeSet per concern
+- changeSet:
+    id: 1766002045101-1
+    author: firstname.lastname
+    changes:
+      - createTable: ...        # only the table
+
+- changeSet:
+    id: 1766002045101-2
+    author: firstname.lastname
+    changes:
+      - addUniqueConstraint: ...  # unique constraint separately
+
+- changeSet:
+    id: 1766002045101-3
+    author: firstname.lastname
+    changes:
+      - createIndex: ...          # each index in its own changeSet
+
+- changeSet:
+    id: 1766002045101-4
+    author: firstname.lastname
+    changes:
+      - addForeignKeyConstraint: ...  # FK separately
+```
+
+---
+
+## Complete Gold Standard Example
+
+Based on `ms-geolocation` real migration:
+
+```yaml
+databaseChangeLog:
+  - changeSet:
+      id: 1766002045101-1
+      author: firstname.lastname (generated)
+      validCheckSum: ANY
+      changes:
+        - createTable:
+            tableName: device_permission
+            remarks: 'MAE: Device permission state and configuration'
+            columns:
+              - column:
+                  name: id
+                  type: INT
+                  autoIncrement: true
+                  remarks: Primary key identifier
+                  constraints:
+                    nullable: false
+                    primaryKey: true
+                    primaryKeyName: PK_device_permission_id
+              - column:
+                  name: user_id
+                  type: INT
+                  remarks: User associated with device permission state
+                  constraints:
+                    nullable: false
+              - column:
+                  name: fingerprint
+                  type: VARCHAR(250)
+                  remarks: Device fingerprint for identification
+              - column:
+                  name: permission_status
+                  type: ENUM('AUTHORIZED', 'REJECTED')
+                  remarks: Current permission status for location access
+                  constraints:
+                    nullable: false
+              - column:
+                  name: platform
+                  type: VARCHAR(50)
+                  remarks: Device platform (iOS, Android, Web)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: DATETIME
+                  remarks: Timestamp when permission state was created
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: DATETIME
+                  remarks: Timestamp when permission state was last updated
+                  constraints:
+                    nullable: false
+
+  - changeSet:
+      id: 1766002045101-2
+      author: firstname.lastname (generated)
+      changes:
+        - addUniqueConstraint:
+            tableName: device_permission
+            columnNames: user_id, fingerprint
+            constraintName: UQ_DEVICE_PERMISSION_USER_ID_FINGERPRINT
+
+  - changeSet:
+      id: 1766002045101-3
+      author: firstname.lastname (generated)
+      changes:
+        - createIndex:
+            tableName: device_permission
+            indexName: IDX_DEVICE_PERMISSION_STATUS
+            columns:
+              - column:
+                  name: permission_status
+
+  - changeSet:
+      id: 1766002045101-4
+      author: firstname.lastname (generated)
+      changes:
+        - createIndex:
+            tableName: device_permission
+            indexName: IDX_DEVICE_PERMISSION_USER_ID
+            columns:
+              - column:
+                  name: user_id
+
+  - changeSet:
+      id: 1766002045101-5
+      author: firstname.lastname (generated)
+      changes:
+        - addForeignKeyConstraint:
+            baseTableName: device_permission_log
+            baseColumnNames: device_id
+            referencedTableName: device_permission
+            referencedColumnNames: id
+            constraintName: FK_DEVICE_PERMISSION_LOG_DEVICE_PERMISSION_DEVICE_ID
+            deferrable: false
+            initiallyDeferred: false
+            validate: true
+```
+
+---
+
+## Common Auto-Generated Anti-Patterns to Fix
+
+```yaml
+# BAD — what Liquibase generates by default
+- changeSet:
+    id: 12345
+    author: root
+    changes:
+      - createTable:
+          tableName: Customers          # WRONG: plural + CamelCase
+          columns:
+            - column:
+                name: id               # MISSING: remarks
+                type: BIGINT           # WRONG: use INT
+                autoIncrement: true
+                constraints:
+                  primaryKey: true     # MISSING: primaryKeyName
+            - column:
+                name: customer_name    # MISSING: remarks
+                type: varchar(255)     # WRONG: lowercase type, inconsistent size
+      - createIndex:                   # WRONG: bundled with createTable
+          indexName: idx1              # WRONG: non-descriptive name
+          tableName: Customers
+          columns:
+            - column:
+                name: customer_name
+
+# GOOD — corrected
+- changeSet:
+    id: {timestamp}-1
+    author: firstname.lastname
+    changes:
+      - createTable:
+          tableName: customer          # singular, snake_case
+          remarks: 'MAE: Customer master data'
+          columns:
+            - column:
+                name: id
+                type: INT
+                autoIncrement: true
+                remarks: Primary key identifier
+                constraints:
+                  nullable: false
+                  primaryKey: true
+                  primaryKeyName: PK_customer_id
+            - column:
+                name: customer_name
+                type: VARCHAR(255)
+                remarks: Full name of the customer
+
+- changeSet:
+    id: {timestamp}-2
+    author: firstname.lastname
+    changes:
+      - createIndex:
+          tableName: customer
+          indexName: IDX_CUSTOMER_NAME
+          columns:
+            - column:
+                name: customer_name
+```
+
+---
+
+## Audit Report Format
+
+When reviewing a Liquibase YAML for compliance:
+
+```
+LIQUIBASE YAML COMPLIANCE REPORT
+─────────────────────────────────
+Status: COMPLIANT | PARTIAL | NON_COMPLIANT
+
+VIOLATIONS
+──────────
+[1] CRITICAL · NAMING · changeSet id: 12345, table: Customers
+    Issue: Table name must be singular and snake_case
+    Fix:   tableName: customer
+
+[2] CRITICAL · DOCUMENTATION · column: customer_name
+    Issue: Missing 'remarks' field — all columns require a description
+    Fix:   Add remarks: "Full name of the customer"
+
+[3] CRITICAL · NAMING · index: idx1
+    Issue: Index name must follow IDX_{table}_{column} pattern
+    Fix:   indexName: IDX_CUSTOMER_NAME
+
+[4] CRITICAL · DOCUMENTATION · table: customer
+    Issue: Missing 'remarks' with table classification (MAE/TRX/DOM/TMP)
+    Fix:   remarks: 'MAE: Customer master data'
+
+[5] WARNING · STRUCTURE · changeSet groups createTable + createIndex
+    Issue: Each concern should be in its own changeSet
+    Fix:   Move createIndex to a new changeSet id: {timestamp}-2
+
+[6] WARNING · NAMING · primaryKey with no primaryKeyName
+    Issue: PK name must follow PK_{table}_{field} pattern
+    Fix:   Add primaryKeyName: PK_customer_id
+
+CORRECTED YAML
+──────────────
+[corrected yaml snippet]
+```
+
+---
+
+## Quick Compliance Checklist
+
+- [ ] File name: `{yyyyMMddHHmmss}_{JIRA-TICKET}.yaml`
+- [ ] Master changelog uses `includeAll`, untouched
+- [ ] Table name: singular, snake_case, no abbreviations
+- [ ] Table `remarks` includes classification: `'MAE: ...'` / `'TRX: ...'` / `'DOM: ...'` / `'TMP: ...'`
+- [ ] Every column has a descriptive `remarks` field
+- [ ] Primary key: `primaryKeyName: PK_{table}_id`
+- [ ] Foreign keys: `constraintName: FK_{origin}_{target}_{field}` (UPPER_SNAKE)
+- [ ] Indexes: `indexName: IDX_{table}_{column}` (UPPER_SNAKE)
+- [ ] Unique constraints: `constraintName: UQ_{table}_{columns}` (UPPER_SNAKE)
+- [ ] Data types: `INT`, `VARCHAR(n)`, `DECIMAL(19,2)`, `DATETIME`, `JSON`, `ENUM(...)`, `BIT(1)`
+- [ ] Audit columns: `created_at DATETIME NOT NULL` present on transactional/master tables
+- [ ] One concern per changeSet (createTable / addIndex / addForeignKey / addUniqueConstraint)
+- [ ] No auto-generated generic IDs — use `{timestamp}-{n}` format

@@ -1,0 +1,42 @@
+{
+  "eval_id": 5,
+  "eval_name": "sqs-config",
+  "prompt": "Tengo un nuevo microservicio ms-payments que necesita consumir una cola SQS FIFO...",
+  "assertions": [
+    {
+      "name": "sqs-client-config-present",
+      "text": "Output contains SqsClientConfig class",
+      "type": "string_match"
+    },
+    {
+      "name": "tracing-listener-wrapper-present",
+      "text": "Output contains TracingMessageListenerWrapper class",
+      "type": "string_match"
+    },
+    {
+      "name": "tracing-sqs-endpoint-present",
+      "text": "Output contains TracingSqsEndpoint class",
+      "type": "string_match"
+    },
+    {
+      "name": "tracing-bean-post-processor-present",
+      "text": "Output contains TracingSqsListenerAnnotationBeanPostProcessor class",
+      "type": "string_match"
+    },
+    {
+      "name": "listener-has-start-end-logs",
+      "text": "The SQS listener contains START and END log entries",
+      "type": "string_match"
+    },
+    {
+      "name": "listener-catches-exception",
+      "text": "The SQS listener catches broad Exception (not a specific subtype) to avoid retry storms",
+      "type": "reasoning"
+    },
+    {
+      "name": "yaml-config-present",
+      "text": "Output includes YAML configuration referencing the queue URL under a structured property path",
+      "type": "reasoning"
+    }
+  ]
+}
