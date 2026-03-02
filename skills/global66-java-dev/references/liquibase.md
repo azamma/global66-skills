@@ -78,6 +78,48 @@ remarks: 'TRX: Audit log for device permission changes'
 
 ---
 
+## Enum Column Mapping (Java Entity → Liquibase YAML)
+
+When a Java entity defines a column as an `Enum` type, the Liquibase YAML **must** use `ENUM(...)` instead of `VARCHAR`.
+
+**Rule**: Map Java Enum types to MySQL ENUM with all possible values in uppercase.
+
+```java
+// Java Entity
+public class AccountEntity {
+    @Column(name = "account_type", nullable = false)
+    @Enumerated(EnumType.STRING)  // or just @Enumerated
+    private AccountType accountType;
+}
+
+public enum AccountType {
+    WALLET, VAULT, SAVINGS
+}
+```
+
+```yaml
+# CORRECT — uses ENUM with all values
+- column:
+    name: account_type
+    type: ENUM('WALLET', 'VAULT', 'SAVINGS')
+    remarks: Type of account (WALLET, VAULT, SAVINGS)
+    constraints:
+      nullable: false
+
+# WRONG — using VARCHAR for enum columns
+- column:
+    name: account_type
+    type: VARCHAR(50)  # ❌ INCORRECT: must be ENUM
+```
+
+**Validation checklist for Enum columns:**
+- [ ] YAML uses `ENUM('VALUE1', 'VALUE2', ...)` not `VARCHAR`
+- [ ] All enum values are listed in uppercase inside the ENUM definition
+- [ ] The `remarks` field documents what each value means
+- [ ] Java `@Enumerated(EnumType.STRING)` maps to the ENUM type
+
+---
+
 ## Allowed Data Types
 
 | Use | Type | Notes |
@@ -246,6 +288,7 @@ databaseChangeLog:
     changes:
       - createTable:
           tableName: Customers          # WRONG: plural + CamelCase
+          remarks: 'TRX: Customer data'  # MISSING: classification prefix
           columns:
             - column:
                 name: id               # MISSING: remarks
@@ -256,6 +299,9 @@ databaseChangeLog:
             - column:
                 name: customer_name    # MISSING: remarks
                 type: varchar(255)     # WRONG: lowercase type, inconsistent size
+            - column:
+                name: account_type     # WRONG: enum as VARCHAR
+                type: VARCHAR(50)      # WRONG: must be ENUM('WALLET','VAULT')
       - createIndex:                   # WRONG: bundled with createTable
           indexName: idx1              # WRONG: non-descriptive name
           tableName: Customers
@@ -285,6 +331,12 @@ databaseChangeLog:
                 name: customer_name
                 type: VARCHAR(255)
                 remarks: Full name of the customer
+            - column:
+                name: account_type
+                type: ENUM('WALLET', 'VAULT', 'SAVINGS')  # CORRECT: enum as ENUM
+                remarks: Account type classification (WALLET=personal, VAULT=business, SAVINGS=savings)
+                constraints:
+                  nullable: false
 
 - changeSet:
     id: {timestamp}-2
@@ -327,11 +379,15 @@ VIOLATIONS
     Issue: Missing 'remarks' with table classification (MAE/TRX/DOM/TMP)
     Fix:   remarks: 'MAE: Customer master data'
 
-[5] WARNING · STRUCTURE · changeSet groups createTable + createIndex
+[5] CRITICAL · DATA_TYPE · column: account_type
+    Issue: Enum column mapped as VARCHAR instead of ENUM
+    Fix:   type: ENUM('WALLET', 'VAULT', 'SAVINGS')
+
+[6] WARNING · STRUCTURE · changeSet groups createTable + createIndex
     Issue: Each concern should be in its own changeSet
     Fix:   Move createIndex to a new changeSet id: {timestamp}-2
 
-[6] WARNING · NAMING · primaryKey with no primaryKeyName
+[7] WARNING · NAMING · primaryKey with no primaryKeyName
     Issue: PK name must follow PK_{table}_{field} pattern
     Fix:   Add primaryKeyName: PK_customer_id
 
@@ -354,6 +410,7 @@ CORRECTED YAML
 - [ ] Indexes: `indexName: IDX_{table}_{column}` (UPPER_SNAKE)
 - [ ] Unique constraints: `constraintName: UQ_{table}_{columns}` (UPPER_SNAKE)
 - [ ] Data types: `INT`, `VARCHAR(n)`, `DECIMAL(19,2)`, `DATETIME`, `JSON`, `ENUM(...)`, `BIT(1)`
+- [ ] **Enum columns: use `ENUM('VAL1','VAL2')` NOT `VARCHAR`** (map from Java @Enumerated)
 - [ ] Audit columns: `created_at DATETIME NOT NULL` present on transactional/master tables
 - [ ] One concern per changeSet (createTable / addIndex / addForeignKey / addUniqueConstraint)
 - [ ] No auto-generated generic IDs — use `{timestamp}-{n}` format
