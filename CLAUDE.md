@@ -12,7 +12,7 @@ This is a **Claude Code skills repository** for Global66 Java microservices deve
 /mnt/c/repos/global66-skills/
 ├── skills/global66-java-dev/           # Main skill definition
 │   ├── SKILL.md                        # ~590 lines - core skill with architecture rules
-│   ├── evals/evals.json                # 7 evaluation test cases (IDs 1-7)
+│   ├── evals/evals.json                # 12 evaluation test cases (IDs 1-12)
 │   └── references/                     # 12 specialized reference documents
 │       ├── srp-patterns.md             # Semantic naming (ensure*, fetch*, guard*)
 │       ├── transactional.md            # @Transactional rules + audit workflow
@@ -98,10 +98,39 @@ This repository has no build system (no Maven/Gradle). It's documentation-only.
 ```bash
 # Search for patterns across skills
 grep -r "ensureUser" skills/
+grep -r "rollbackFor" skills/ --include="*.md"
 
 # Compare eval outputs
 ls global66-java-dev-workspace/iteration-1/*/with_skill/
 ls global66-java-dev-workspace/iteration-1/*/without_skill/
+
+# Count lines in skill
+wc -l skills/global66-java-dev/SKILL.md
+
+# List all reference documents
+ls -la skills/global66-java-dev/references/
+```
+
+**Skill Installation:**
+```bash
+# Copy skill to global Claude Code installation (requires restart)
+cp -r skills/global66-java-dev /root/.claude/skills/
+
+# Verify global skill is synced
+ls /root/.claude/skills/global66-java-dev/references/
+```
+
+**Evaluation Workflow Commands:**
+```bash
+# Create new iteration directory
+mkdir -p global66-java-dev-workspace/iteration-{N}/{scenario}/{with_skill,without_skill}
+
+# Run diff between with/without skill outputs
+diff -u global66-java-dev-workspace/iteration-1/{scenario}/without_skill/ \
+            global66-java-dev-workspace/iteration-1/{scenario}/with_skill/
+
+# View specific eval by ID (see evals.json for IDs 1-7)
+grep -A 5 '"id": 1' skills/global66-java-dev/evals/evals.json
 ```
 
 ## Evaluation Workflow
@@ -126,15 +155,41 @@ When running evals, follow this pattern:
 | 5 | SQS config | 4 traceability classes, FIFO patterns |
 | 6 | Swagger audit | Interface annotations, @ErrorResponses |
 | 7 | Liquibase review | G81-POL-033, naming conventions |
+| 8 | Cache review | Redis/Caffeine naming, TTL, serialization, self-injection |
+| 9 | API REST review | URL naming, kebab-case, versioning, prefixes |
+| 10 | Exception handling | ApiRestException, ErrorReason, ErrorSource, factories |
+| 11 | API client generation | Retrofit 9-file pattern, mappers, config |
+| 12 | SonarQube issues | Mapping S3776/S112/S107/S138 to Global66 patterns |
+| 8 | Cache review | Redis/Caffeine naming, TTL, serialization |
+| 9 | API REST audit | URL naming, prefixes, versioning, HTTP methods |
+| 10 | Exception handling | ApiRestException, ErrorReason, ErrorSource |
+| 11 | API client generation | Retrofit 9-file pattern, mappers, config |
+| 12 | SonarQube resolution | Cognitive complexity, SRP mapping |
 
 ## Skill Development Guidelines
 
 When modifying the skill:
 
 1. **Update SKILL.md** frontmatter description if trigger conditions change
-2. **Add reference docs** for new domains (already has 9)
+2. **Add reference docs** for new domains (currently has 12)
 3. **Update evals.json** to add new test cases
 4. **Run evaluations** to verify skill effectiveness
+5. **Sync to global installation** - copy updated files to `/root/.claude/skills/global66-java-dev/`
+
+### Skill Frontmatter Format
+
+The SKILL.md must start with YAML frontmatter for Claude Code to recognize it:
+
+```yaml
+---
+name: global66-java-dev
+description: >
+  Spring Boot microservice development following Global66's hexagonal architecture standards.
+  Use this skill whenever a user is developing Java code for Global66 microservices...
+---
+```
+
+The description is critical - Claude Code uses it for semantic matching when deciding which skills to load.
 
 ### Reference Document Template
 
