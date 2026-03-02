@@ -7,7 +7,7 @@ Repositorio de skills de Claude Code para el desarrollo de microservicios Java e
 Este repositorio contiene:
 - **Skill `global66-java-dev`**: Instrucciones detalladas para que Claude Code genere código siguiendo los estándares de Global66
 - **7 escenarios de evaluación**: Casos de prueba para validar la efectividad del skill
-- **9 documentos de referencia**: Guías especializadas (SRP, @Transactional, SQS, Swagger, Liquibase, etc.)
+- **12 documentos de referencia**: Guías especializadas (SRP, @Transactional, SQS, Swagger, Liquibase, API REST, Cache, Exceptions, etc.)
 
 ## Uso Rápido
 
@@ -39,7 +39,7 @@ global66-skills/
 │       ├── SKILL.md              # ~590 líneas - definición principal del skill
 │       ├── evals/
 │       │   └── evals.json        # 7 casos de evaluación
-│       └── references/           # 9 guías especializadas
+│       └── references/           # 12 guías especializadas
 │           ├── srp-patterns.md       # SRP y naming semántico
 │           ├── transactional.md      # Reglas @Transactional
 │           ├── logging.md            # SGSI-POL-005 compliance
@@ -48,7 +48,11 @@ global66-skills/
 │           ├── liquibase.md          # G81-POL-033 migraciones DB
 │           ├── api-client.md         # Retrofit client generator
 │           ├── tests.md              # Patrones de testing
-│           └── sonar.md              # SonarQube coverage + issues
+│           ├── sonar.md              # SonarQube coverage + issues
+│           ├── checklist.md          # Checklist pre-entrega
+│           ├── cache.md              # Caché Redis/Caffeine
+│           ├── api-rest.md           # API REST guidelines
+│           └── exceptions.md         # ApiRestException, ErrorReason
 ├── global66-java-dev-workspace/
 │   └── iteration-1/            # Resultados de evaluación A/B
 │       ├── endpoint-generation/    # Eval 1: Generar endpoint
@@ -170,6 +174,42 @@ Convenciones G81-POL-033:
 - `indexName`: `IDX_{table}_{columns}`
 - `constraintName`: `FK_{table}_{ref_table}_{column}`
 - Un concern por changeSet (separar índices, FKs)
+
+### Cache (`cache.md`)
+
+Convenciones para caché con Redis/Caffeine:
+
+- Nombres de caché: plural, camelCase, inglés (`countries`, `routePairCostConfig`)
+- Keys sin parámetros: `'all'` para listas
+- Keys compuestas: `{ #param1, #param2 }`
+- TTL obligatorio para Redis
+- Serialización con type info: `activateDefaultTyping(..., DefaultTyping.EVERYTHING)`
+- Self-injection: `@Scope(proxyMode = ScopedProxyMode.TARGET_CLASS)`
+
+### API REST (`api-rest.md`)
+
+Convenciones para endpoints REST:
+
+- Recursos: plural, minúscula, kebab-case (`/customers`, `/personal-info`)
+- Prefijos: `b2c`, `b2b`, `bo`, `ext`, `iuse`, `sfc`, `notification`, `cron`
+- Versionado: header `X-API-VERSION` (default v1)
+- User ID de token para b2c/b2b/bo, nunca del body
+- iuse/sfc NO expuestos en API Gateway
+
+### Exception Handling (`exceptions.md`)
+
+Manejo de excepciones con `ApiRestException`:
+
+```java
+throw ApiRestException.builder()
+    .reason(ErrorReason.CUSTOMER_NOT_FOUND)
+    .source(ErrorSource.BUSINESS_SERVICE)
+    .build();
+```
+
+- NO crear enums locales de ErrorReason/ErrorSource
+- Usar TODO: `// TODO: CUSTOMER_PLAN_NOT_FOUND (NOT_FOUND)`
+- ErrorSource por capa: BUSINESS_SERVICE, DATA_REPOSITORY, REST_CONTROLLER, HTTP_CLIENT_*
 
 ## Contribuir
 

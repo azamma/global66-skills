@@ -13,7 +13,7 @@ This is a **Claude Code skills repository** for Global66 Java microservices deve
 ├── skills/global66-java-dev/           # Main skill definition
 │   ├── SKILL.md                        # ~590 lines - core skill with architecture rules
 │   ├── evals/evals.json                # 7 evaluation test cases (IDs 1-7)
-│   └── references/                     # 9 specialized reference documents
+│   └── references/                     # 12 specialized reference documents
 │       ├── srp-patterns.md             # Semantic naming (ensure*, fetch*, guard*)
 │       ├── transactional.md            # @Transactional rules + audit workflow
 │       ├── logging.md                  # SGSI-POL-005 logging compliance
@@ -22,7 +22,11 @@ This is a **Claude Code skills repository** for Global66 Java microservices deve
 │       ├── liquibase.md                # G81-POL-033 DB migration rules
 │       ├── api-client.md               # Retrofit client generation (9 files)
 │       ├── tests.md                    # Unit test patterns (Given_When_Then)
-│       └── sonar.md                    # SonarQube coverage gaps + issues
+│       ├── sonar.md                    # SonarQube coverage gaps + issues
+│       ├── checklist.md                # Pre-submission 40+ item checklist
+│       ├── cache.md                    # Redis/Caffeine caching guidelines
+│       ├── api-rest.md                 # REST API naming and structure
+│       └── exceptions.md               # ApiRestException, ErrorReason, ErrorSource
 ├── global66-java-dev-workspace/        # Evaluation workspaces
 │   └── iteration-1/                    # A/B test results (7 scenarios)
 │       ├── endpoint-generation/        # Eval 1: Create endpoint (with vs without skill)
