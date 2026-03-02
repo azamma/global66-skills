@@ -21,9 +21,16 @@ Usar esta lista antes de finalizar cualquier código para Global66.
 
 ## SRP & Naming
 - [ ] No `process/handle/execute/validate/check` as method names
-- [ ] No inline `throw new` — use factory methods (`build*Exception`)
-- [ ] No `RuntimeException` thrown directly — always `BusinessException(ErrorCode.XXX, ...)`
 - [ ] No cognitive complexity > 15 — extract to private methods with semantic naming
+
+## Exception Handling
+- [ ] No inline `throw new RuntimeException()` or `throw new Exception()`
+- [ ] Always use `ApiRestException.builder().reason(ErrorReason.XXX).source(ErrorSource.XXX).build()`
+- [ ] `ErrorReason` is specific to the error condition (e.g., `CUSTOMER_NOT_FOUND`)
+- [ ] `ErrorSource` matches the layer: `BUSINESS_SERVICE`, `DATA_REPOSITORY`, `REST_CONTROLLER`, `HTTP_CLIENT_*`
+- [ ] Factory methods `build*Exception()` for repeated exceptions
+- [ ] NO local enums created for custom errors
+- [ ] Use `// TODO: ERROR_CODE (HTTP_STATUS)` comment when specific ErrorReason doesn't exist
 
 ## MapStruct
 - [ ] MapStruct mapper per layer, with `INSTANCE` singleton
@@ -68,3 +75,38 @@ Usar esta lista antes de finalizar cualquier código para Global66.
 - [ ] `@SecurityRequirement` on protected endpoints
 - [ ] Request DTOs: `@Schema` at class level (name + description + example) and each field
 - [ ] Response records: `@Schema` on each component with description + example
+
+## Cache
+- [ ] Cache name: plural, camelCase, English (`countries`, `routePairCostConfig`)
+- [ ] String keys use single quotes: `key = "'all'"`, `key = "'enabled'"`
+- [ ] Composite keys: comma-separated parameters: `key = "{ #id, #type }"`
+- [ ] Cache service has `@Scope(proxyMode = ScopedProxyMode.TARGET_CLASS)` for self-injection
+- [ ] TTL configured for Redis caches in CacheManager or per-cache configuration
+- [ ] DTOs from shared library used for serialization (avoid LinkedHashMap casting issues)
+- [ ] Proper serialization with type info: `activateDefaultTyping(..., DefaultTyping.EVERYTHING)`
+- [ ] Cache eviction implemented when data changes (create/update/delete operations)
+- [ ] Cache type decision documented: Redis for shared, Caffeine for local-only
+
+## API REST
+- [ ] Resource names: plural nouns, lowercase (`/customers`, `/orders`)
+- [ ] Multi-word resources: kebab-case (`/personal-info` not `/personalInfo`)
+- [ ] No verbs in URLs: use `/customers` not `/get-customer`
+- [ ] HTTP methods used correctly: GET/POST/PUT/PATCH/DELETE
+- [ ] Prefix chosen correctly: b2c/b2b/bo/ext/iuse/sfc/notification/cron
+- [ ] User ID extracted from auth token for b2c/b2b/bo (not from request body)
+- [ ] Request/Response use DTOs, never Entities or ambiguous types
+- [ ] Versioning with `X-API-VERSION` header for breaking changes
+- [ ] iuse/sfc endpoints NOT exposed in API Gateway
+- [ ] ext endpoints rate-limited and without sensitive data
+
+## Cache
+- [ ] Cache name is plural, camelCase, English (e.g., `countries`, `routePairCostConfig`)
+- [ ] String keys use single quotes: `key = "'all'"`, `key = "'enabled'"`
+- [ ] Composite keys use comma-separated params: `key = "{ #routePairId, #paymentTypeId }"`
+- [ ] Cache service has `@Scope(proxyMode = ScopedProxyMode.TARGET_CLASS)` for self-injection
+- [ ] Cache service uses self-injection (`private final {Domain}CacheService self`) to call cached methods internally
+- [ ] TTL configured for Redis caches in CacheManager bean
+- [ ] DTOs from shared library (`arch-cache-dto`) used for serialization
+- [ ] Full type info serialization enabled: `.activateDefaultTyping(...)` in RedisCacheConfig
+- [ ] Local cache (Caffeine) for single-instance; Redis for shared caches
+- [ ] Cache eviction implemented when data changes (create/update/delete operations)

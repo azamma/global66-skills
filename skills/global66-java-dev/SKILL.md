@@ -5,10 +5,13 @@ description: >
   Use this skill whenever a user is developing Java code for Global66 microservices — whether
   creating new features, refactoring existing business logic, generating tests, implementing
   controllers, services, persistence, clients, mappers, SQS consumers/producers, Swagger/
-  OpenAPI documentation, or Liquibase YAML database migrations. Also trigger for compliance
-  reviews: log patterns (START/END, PII, MDC), SQS traceability, Swagger audits, and Liquibase
-  YAML reviews (table naming, remarks, constraint names, index naming, G81-POL-033). Trigger
-  on any Java/Spring Boot task in a Global66 context, even without explicit mention of
+  OpenAPI documentation, Liquibase YAML database migrations, cache implementations (Redis/
+  Caffeine), REST API endpoints, or exception handling. Also trigger for compliance reviews:
+  log patterns (START/END, PII, MDC), SQS traceability, Swagger audits, Liquibase YAML reviews
+  (table naming, remarks, constraint names, index naming, G81-POL-033), cache reviews (naming
+  conventions, TTL, serialization), REST API reviews (URL naming, HTTP methods, prefixes,
+  versioning), and exception handling reviews (ApiRestException, ErrorReason, ErrorSource).
+  Trigger on any Java/Spring Boot task in a Global66 context, even without explicit mention of
   "hexagonal" or "architecture". Also trigger when the user asks for a code review, provides
   a git diff or YAML file, or wants to verify their code follows Global66 conventions.
 ---
@@ -242,7 +245,55 @@ For full details and examples, see `references/srp-patterns.md`.
 | `find*` | Query persistence | Optional | No |
 | `build*Exception` | Exception factory | Exception | No |
 
-### Method Structure Rules
+## Exception Handling
+
+For complete exception patterns, `ErrorReason`/`ErrorSource` reference, and examples by layer, see `references/exceptions.md`.
+
+### Quick Reference
+
+```java
+// Standard pattern - always use this
+throw ApiRestException.builder()
+    .reason(ErrorReason.NOT_FOUND)           // Specific error reason
+    .source(ErrorSource.BUSINESS_SERVICE)    // Layer where error occurred
+    .build();
+```
+
+### Key Rules
+
+| Rule | Requirement |
+|------|-------------|
+| `EXC_BUILDER` | Always use `ApiRestException.builder()` — never `throw new RuntimeException()` |
+| `EXC_REASON` | Use specific `ErrorReason` (e.g., `CUSTOMER_NOT_FOUND`, not generic `BAD_REQUEST`) |
+| `EXC_SOURCE` | Match `ErrorSource` to layer: `BUSINESS_SERVICE`, `DATA_REPOSITORY`, `REST_CONTROLLER`, `HTTP_CLIENT_*` |
+| `EXC_FACTORY` | Create `build*Exception` factory methods for repeated exceptions |
+
+### Common ErrorReason by Domain
+
+- Customer: `CUSTOMER_NOT_FOUND`, `CUSTOMER_NOT_ENABLED`, `CUSTOMER_ALREADY_EXISTS`
+- Transaction: `TRANSACTION_NOT_FOUND`, `TRANSACTION_LIMIT_EXCEEDED`, `TRANSACTION_CUSTOMER_BLOCKED`
+- Quote: `QUOTE_NOT_FOUND`, `QUOTE_EXPIRED`
+- Account: `ACCOUNT_NOT_FOUND`, `INSUFFICIENT_BALANCE`, `ACCOUNT_IS_CLOSED`
+- Beneficiary: `BENEFICIARY_NOT_FOUND`, `BENEFICIARY_ALREADY_EXISTS`
+
+### Custom Errors
+
+When domain-specific errors don't exist in the library:
+
+1. **DO NOT create local enums** — use generic errors with TODO comment
+2. **Add TODO with error code**: `// TODO: CUSTOMER_PLAN_NOT_FOUND (NOT_FOUND)`
+3. **Request architecture team** to add the error to the shared library
+4. **Update after library release**: Replace generic error with specific `ErrorReason`
+
+```java
+// TODO: CUSTOMER_PLAN_NOT_FOUND (NOT_FOUND)
+throw ApiRestException.builder()
+    .reason(ErrorReason.NOT_FOUND)  // Generic - replace once available
+    .source(ErrorSource.BUSINESS_SERVICE)
+    .build();
+```
+
+## Method Structure Rules
 
 - **Public methods**: max 10 lines, orchestration only — no `if-else`, no null checks, no direct persistence calls
 - **Private methods**: max 8 lines, single responsibility
@@ -308,7 +359,7 @@ For the full coverage workflow (git diff + Sonar report) and the Sonar rule → 
 **Issues resolution** (user provides Sonar report):
 - Prioritize CRITICAL (vulnerabilities, bugs) → MAJOR (complexity, duplication) → MINOR (style)
 - `java:S3776` Cognitive Complexity → extract to `ensure*/verify*/is*/has*` private methods (SRP pattern)
-- `java:S112` Generic exception → `BusinessException(ErrorCode.XXX, ...)` factory method
+- `java:S112` Generic exception → `ApiRestException` with `ErrorReason` and `ErrorSource`
 - `java:S107` Too many parameters → wrap in `*Data` domain object, never Builder Pattern
 - `java:S106` System.out → `@Slf4j` + `log.*` following SGSI-POL-005
 
@@ -490,10 +541,51 @@ For full rules, Gold Standard examples, and audit format, see `references/liquib
 
 **Audit format:** see `references/liquibase.md` — violations list + corrected YAML.
 
+## Cache Guidelines
+
+For full rules, naming conventions, Redis/Caffeine configuration, and examples, see `references/cache.md`.
+
+| Rule | Requirement |
+|------|-------------|
+| `CACHE_NAME` | Plural, camelCase, English: `countries`, `routePairCostConfig` |
+| `CACHE_KEY` | `'all'` for lists; comma-separated params for composite keys |
+| `CACHE_SCOPE` | Use `@Scope(proxyMode = ScopedProxyMode.TARGET_CLASS)` for self-injection |
+| `CACHE_TTL` | Always configure TTL for Redis caches |
+| `CACHE_DTO` | Use DTOs from shared library for serialization |
+| `CACHE_TYPE` | Local (Caffeine) for single-instance; Redis for shared caches |
+
+**Decision tree:**
+1. Shared across instances? Yes → Redis, No → Local (Caffeine)
+2. If Redis exists, reuse the connection
+
+## API REST Guidelines
+
+For full naming conventions, HTTP methods, URL structure, prefixes, and versioning rules, see `references/api-rest.md`.
+
+| Rule | Requirement |
+|------|-------------|
+| `API_RESOURCE` | Plural nouns, lowercase, kebab-case: `/customers`, `/personal-info` |
+| `API_PREFIX` | Context-based: `b2c`, `b2b`, `bo`, `ext`, `iuse`, `sfc`, `notification`, `cron` |
+| `API_METHOD` | Correct HTTP verb for action: GET/POST/PUT/PATCH/DELETE |
+| `API_VERSION` | Use `X-API-VERSION` header for versioning |
+| `API_DTO` | Request/Response must use DTOs, never Entities |
+
+**URL Pattern:** `/{service}/{prefix}/{resource}`
+
+**Prefixes:**
+- `b2c` - Business-to-consumer (session token required, API Gateway)
+- `b2b` - Business-to-business (session token required, API Gateway)
+- `bo` - Back-office (session token required, API Gateway)
+- `ext` - External/public (no auth, API Gateway, rate-limited)
+- `iuse` - Internal use (private, LB only)
+- `sfc` - Salesforce (private, LB only)
+- `notification` - Webhooks (API Key, separate API Gateway)
+- `cron` - Scheduled tasks (Event Bridge → Lambda)
+
 ## Pre-Entrega Checklist
 
 Ver el checklist completo en `references/checklist.md` con 40+ ítems organizados por categoría:
 - Arquitectura (entities, streams, líneas por método)
 - @Transactional (layer, public, rollbackFor, readOnly, no external calls)
 - SRP & Naming (no métodos genéricos, factory exceptions, complejidad cognitiva)
-- MapStruct, API Clients, Testing, Logging, SQS, Liquibase, Swagger
+- MapStruct, API Clients, Testing, Logging, SQS, Liquibase, Swagger, Cache, API REST, Exception Handling
