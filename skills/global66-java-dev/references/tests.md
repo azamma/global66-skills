@@ -45,32 +45,76 @@ void Given_InactiveAccount_When_UpdatePermission_Then_ThrowsAccountNotActiveExce
 void Given_ValidUserId_When_GetLastLocation_Then_ReturnsLastLocationRecord()
 ```
 
+---
+
 ## JSON Fixtures
 
 Complex domain objects must be loaded from JSON files, never constructed inline.
 
-**Path**: `src/test/resources/{layer}/{domain}/{ClassName}-{STATE}.json`
+### FileUtils — Gold Standard Loader
 
-**Naming**:
-- `UserData-VALID.json`
-- `UserData-SAVED.json`
-- `DevicePermissionData-INACTIVE.json`
-- `LocationData-WITHOUT_GEOCODING.json`
+Use the project's `FileUtils` utility (see `ms-geolocation` as reference):
 
-**Helper method (define once in test or base class)**:
 ```java
-private <T> T loadJson(String path, Class<T> type) {
-    try {
-        String json = new String(
-            Objects.requireNonNull(
-                getClass().getClassLoader().getResourceAsStream(path)
-            ).readAllBytes()
-        );
-        return ObjectMapperUtils.loadObject(json, type);
-    } catch (IOException e) {
-        throw new RuntimeException("Failed to load test fixture: " + path, e);
+// com.global.{domain}.util.FileUtils
+public final class FileUtils {
+    private static final String TEST_DATA_ROOT_PATH = "src/test/resources/";
+
+    private FileUtils() {
+        throw new IllegalStateException("Utility class");
+    }
+
+    public static <T> T loadObject(String jsonFile, Class<T> clazz) {
+        Path path = Paths.get(TEST_DATA_ROOT_PATH.concat(jsonFile));
+        try {
+            String content = Files.readString(path);
+            return ObjectMapperUtils.loadObject(content, clazz);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 }
+```
+
+**Usage in tests — define a private helper per type:**
+
+```java
+private LocationData loadLocationData(String fileName) {
+    return FileUtils.loadObject("data/domain/data/" + fileName, LocationData.class);
+}
+
+private LocationEntity loadLocationEntity() {
+    return FileUtils.loadObject("data/domain/entity/LocationEntityData.json", LocationEntity.class);
+}
+```
+
+### Fixture Path Convention
+
+**Root**: `src/test/resources/data/{layer}/{type}/`
+
+```
+src/test/resources/data/
+├── domain/
+│   ├── data/             # *Data objects (business layer)
+│   ├── entity/           # *Entity objects (persistence layer)
+│   └── external_request/ # External API responses
+├── client/
+│   └── dto/              # Client DTO responses
+└── presentation/
+    └── consumer/         # SQS message DTOs
+```
+
+**Naming**: `ClassName-SCENARIO.json` — uppercase snake_case scenario suffix
+
+```
+LocationData-VALID_BOGOTA.json
+LocationData-NULL_COORDINATES.json
+LocationData-NULL_CUSTOMER_ID.json
+LocationData-WITH_TRANSACTION.json
+LocationData-FAR_DISTANCE.json
+HereGeocodeBasicLocationResponse-VALID.json
+HereGeocodeBasicLocationResponse-NULL_POSTAL.json
+LastLocationDataRecord-NULL_GEOCODING.json
 ```
 
 ---
@@ -79,43 +123,159 @@ private <T> T loadJson(String path, Class<T> type) {
 
 ```java
 @ExtendWith(MockitoExtension.class)
-@DisplayName("LocationGeocodingServiceImpl Tests")
-class LocationGeocodingServiceImplTest {
+class GeoCodeServiceImplTest {
 
-    @Mock private LocationGeocodingPersistence mockLocationGeocodingPersistence;
-    @InjectMocks private LocationGeocodingServiceImpl locationGeocodingService;
+    @Mock private HereClient hereClient;
+    @InjectMocks private GeoCodeServiceImpl geoCodeServiceImpl;
 
-    @Nested
-    @DisplayName("saveGeocodingResult")
-    class SaveGeocodingResultTests {
+    @Test
+    void Given_ValidResponse_When_GetBasicLocation_Then_ReturnMappedResponse() {
+        HereGeocodeBasicLocationResponse mockResponse = FileUtils.loadObject(
+            "data/domain/external_request/here/HereGeocodeBasicLocationResponse-VALID.json",
+            HereGeocodeBasicLocationResponse.class);
 
-        @Test
-        void Given_ValidGeocodingData_When_SaveGeocodingResult_Then_DelegatesToPersistence() {
-            Integer locationId = 12345;
-            String countryCode = "CO";
-            String countryName = "Colombia";
-            String city = "Bogotá";
-            BigDataCloudReverseGeocodingResponse response =
-                loadJson("geocoding/BigDataCloudReverseGeocodingResponse-VALID.json",
-                    BigDataCloudReverseGeocodingResponse.class);
-            String expectedJson = ObjectMapperUtils.toString(response);
+        when(hereClient.geocode("addr", "city", "country")).thenReturn(mockResponse);
 
-            locationGeocodingService.saveGeocodingResult(
-                locationId, countryCode, countryName, city, response);
+        HereGeocodeBasicLocationResponse result =
+            geoCodeServiceImpl.getBasicLocation("addr", "city", "country");
 
-            verify(mockLocationGeocodingPersistence)
-                .saveGeocoding(locationId, countryCode, countryName, city, expectedJson);
-        }
+        assertNotNull(result);
+        assertEquals("7500000", result.postalCode());
+        assertEquals(-33.4489, result.latitude());
+    }
 
-        @Test
-        void Given_NullResponse_When_SaveGeocodingResult_Then_PersistenceCalledWithNullJson() {
-            locationGeocodingService.saveGeocodingResult(1, "CL", "Chile", "Santiago", null);
-            verify(mockLocationGeocodingPersistence)
-                .saveGeocoding(1, "CL", "Chile", "Santiago", null);
-        }
+    @Test
+    void Given_NullPostalCodeInResponse_When_GetBasicLocation_Then_ReturnResponseWithSafeDefaults() {
+        HereGeocodeBasicLocationResponse mockResponse = FileUtils.loadObject(
+            "data/domain/external_request/here/HereGeocodeBasicLocationResponse-NULL_POSTAL.json",
+            HereGeocodeBasicLocationResponse.class);
+
+        when(hereClient.geocode("addr", "city", "country")).thenReturn(mockResponse);
+
+        HereGeocodeBasicLocationResponse result =
+            geoCodeServiceImpl.getBasicLocation("addr", "city", "country");
+
+        assertNotNull(result.postalCode());
     }
 }
 ```
+
+---
+
+## Parametrized Tests
+
+### @ParameterizedTest with @CsvSource — inline fixture file paths
+
+Use when multiple scenarios differ only in which fixture file is loaded:
+
+```java
+@Nested
+@DisplayName("Mandatory Field Validation")
+class MandatoryFieldValidationTests {
+
+    @ParameterizedTest(
+        name = "Given null {0}, when saving, then skips processing without calling dependencies")
+    @CsvSource({
+        "customerId, data/domain/data/LocationData-NULL_CUSTOMER_ID.json",
+        "email,      data/domain/data/LocationData-NULL_EMAIL.json",
+        "fingerprint, data/domain/data/LocationData-NULL_FINGERPRINT.json",
+        "latitude,   data/domain/data/LocationData-NULL_LATITUDE.json",
+        "longitude,  data/domain/data/LocationData-NULL_LONGITUDE.json"
+    })
+    void Given_NullMandatoryField_When_Save_Then_LogsDebugAndSkipsSave(
+            String fieldName, String jsonFilePath) {
+        LocationData locationData = FileUtils.loadObject(jsonFilePath, LocationData.class);
+
+        locationService.save(locationData);
+
+        verifyNoInteractions(authServerClient);
+        verifyNoInteractions(locationPersistence);
+    }
+}
+```
+
+### @ParameterizedTest with @MethodSource — multi-fixture scenarios
+
+Use when each scenario requires multiple fixture files or needs a descriptive scenario name:
+
+```java
+@ParameterizedTest(name = "{0}")
+@MethodSource("provideInvalidCoordinatesScenarios")
+void Given_InvalidCoordinatesInLocations_When_DetectAndAlert_Then_LogWarningAndReturn(
+        String scenarioName, String currentLocationFile, String lastLocationFile) {
+    LocationData current = FileUtils.loadObject(
+        "data/domain/data/" + currentLocationFile, LocationData.class);
+    LastLocationDataRecord last = FileUtils.loadObject(
+        "data/domain/data/" + lastLocationFile, LastLocationDataRecord.class);
+
+    when(locationPersistence.findLastLocationWithEventSource(any(), any(), any()))
+        .thenReturn(Optional.of(last));
+
+    assertThatCode(() -> haversineFraudService.detectAndAlertOnLocationChange(current))
+        .doesNotThrowAnyException();
+
+    verify(haversineFraudSegmentService, never()).sendAlert(any(), any(), anyDouble(), any());
+}
+
+static Stream<Arguments> provideInvalidCoordinatesScenarios() {
+    return Stream.of(
+        Arguments.of("Null coordinates in current location",
+            "LocationData-NULL_COORDINATES.json", "LastLocationDataRecord-VALID.json"),
+        Arguments.of("Null coordinates in last location",
+            "LocationData-VALID_BOGOTA.json", "LastLocationDataRecord-NULL_COORDINATES.json"),
+        Arguments.of("Invalid latitude in current location",
+            "LocationData-INVALID_LATITUDE.json", "LastLocationDataRecord-VALID.json")
+    );
+}
+```
+
+---
+
+## Persistence Test — ArgumentCaptor
+
+Capture the exact object passed to `save()` and assert its internal state:
+
+```java
+@ExtendWith(MockitoExtension.class)
+class LocationGeocodingPersistenceImplTest {
+
+    @InjectMocks private LocationGeocodingPersistenceImpl locationGeocodingPersistence;
+    @Mock private LocationRepository locationRepository;
+
+    private LocationEntity loadLocationEntity() {
+        return FileUtils.loadObject("data/domain/entity/LocationEntityData.json", LocationEntity.class);
+    }
+
+    @Test
+    void Given_ValidLocationId_When_SaveGeocoding_Then_AssociatesGeocodingAndSavesLocation() {
+        LocationEntity locationEntity = loadLocationEntity();
+
+        when(locationRepository.findById(1)).thenReturn(Optional.of(locationEntity));
+        when(locationRepository.save(any(LocationEntity.class))).thenReturn(locationEntity);
+
+        locationGeocodingPersistence.saveGeocoding(1, "CO", "Colombia", "Bogotá", "{...}");
+
+        ArgumentCaptor<LocationEntity> captor = ArgumentCaptor.forClass(LocationEntity.class);
+        verify(locationRepository).save(captor.capture());
+
+        LocationEntity saved = captor.getValue();
+        assertThat(saved.getGeocoding()).isNotNull();
+        assertThat(saved.getGeocoding().getCountryCode()).isEqualTo("CO");
+        assertThat(saved.getGeocoding().getCity()).isEqualTo("Bogotá");
+    }
+
+    @Test
+    void Given_NonExistingLocationId_When_SaveGeocoding_Then_DoNotSave() {
+        when(locationRepository.findById(1)).thenReturn(Optional.empty());
+
+        locationGeocodingPersistence.saveGeocoding(1, "CO", "Colombia", "Bogotá", "{...}");
+
+        verify(locationRepository, never()).save(any(LocationEntity.class));
+    }
+}
+```
+
+---
 
 ## Controller Test Example
 
@@ -135,44 +295,6 @@ class GeoCodeControllerImplTest {
         void Given_ValidAddressCityCountry_When_BasicGeoInfo_Then_DelegatesToService() {
             geoCodeController.basicGeoInfo("Av. Providencia 1234", "Santiago", "Chile");
             verify(mockGeoCodeService).getBasicLocation("Av. Providencia 1234", "Santiago", "Chile");
-        }
-    }
-}
-```
-
-## Persistence Test Example
-
-```java
-@ExtendWith(MockitoExtension.class)
-@DisplayName("UserPersistenceImpl Tests")
-class UserPersistenceImplTest {
-
-    @Mock private UserRepository mockUserRepository;
-    @InjectMocks private UserPersistenceImpl userPersistence;
-
-    @Nested
-    @DisplayName("findById")
-    class FindByIdTests {
-
-        @Test
-        void Given_ExistingUserId_When_FindById_Then_ReturnsMappedData() {
-            Integer userId = 1;
-            UserEntity entity = loadJson("user/UserEntity-ACTIVE.json", UserEntity.class);
-            when(mockUserRepository.findById(userId)).thenReturn(Optional.of(entity));
-
-            Optional<UserData> result = userPersistence.findById(userId);
-
-            assertThat(result).isPresent();
-            assertThat(result.get().getId()).isEqualTo(userId);
-        }
-
-        @Test
-        void Given_NonExistentUserId_When_FindById_Then_ReturnsEmpty() {
-            when(mockUserRepository.findById(999)).thenReturn(Optional.empty());
-
-            Optional<UserData> result = userPersistence.findById(999);
-
-            assertThat(result).isEmpty();
         }
     }
 }
@@ -232,7 +354,7 @@ userData.setEmail("test@test.com");
 userData.setAge(25);
 
 // GOOD: Load from JSON fixture
-UserData userData = loadJson("user/UserData-VALID.json", UserData.class);
+UserData userData = FileUtils.loadObject("data/domain/data/UserData-VALID.json", UserData.class);
 ```
 
 ```java
@@ -245,19 +367,20 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.assertThatCode;
 ```
 
 ```java
 // BAD: Comments
 // Arrange
-UserData userData = loadJson("...", UserData.class);
+UserData userData = FileUtils.loadObject("...", UserData.class);
 // Act
 UserData result = userService.create(userData);
 // Assert
 assertThat(result).isNotNull();
 
 // GOOD: Self-explanatory code, no comments
-UserData userData = loadJson("user/UserData-VALID.json", UserData.class);
+UserData userData = FileUtils.loadObject("data/domain/data/UserData-VALID.json", UserData.class);
 UserData result = createUserService.createUser(userData);
 assertThat(result.getId()).isNotNull();
 assertThat(result.getEmail()).isEqualTo(userData.getEmail());
