@@ -83,6 +83,8 @@ com.global.{domain}/
 4. **Max 3 injected dependencies per service**
 5. **Controllers are thin** — validate input, delegate to service, map response. No logic.
 6. **Public methods orchestrate; private methods do one thing**
+7. **No comments in code** — never add `//` or `/* */` comments unless the user explicitly asks for them
+8. **Only `ApiRestException` is allowed** — `new RuntimeException()`, `new Exception()`, `new IllegalArgumentException()`, or any other raw exception type is STRICTLY FORBIDDEN. Every exception must use `ApiRestException.builder()` with `ErrorReason` and `ErrorSource`
 
 ## @Transactional Rules
 
@@ -259,11 +261,13 @@ throw ApiRestException.builder()
     .build();
 ```
 
+> **PROHIBIDO:** `throw new RuntimeException()` · `throw new Exception()` · `throw new IllegalArgumentException()` · cualquier excepción que no sea `ApiRestException`. Sin excepciones a esta regla.
+
 ### Key Rules
 
 | Rule | Requirement |
 |------|-------------|
-| `EXC_BUILDER` | Always use `ApiRestException.builder()` — never `throw new RuntimeException()` |
+| `EXC_BUILDER` | SIEMPRE usar `ApiRestException.builder()` — nunca `throw new RuntimeException()` ni ninguna otra excepción raw |
 | `EXC_REASON` | Use specific `ErrorReason` (e.g., `CUSTOMER_NOT_FOUND`, not generic `BAD_REQUEST`) |
 | `EXC_SOURCE` | Match `ErrorSource` to layer: `BUSINESS_SERVICE`, `DATA_REPOSITORY`, `REST_CONTROLLER`, `HTTP_CLIENT_*` |
 | `EXC_FACTORY` | Create `build*Exception` factory methods for repeated exceptions |
@@ -311,7 +315,10 @@ public void registerUser(UserData data) {
 }
 private void ensureEmailIsAvailable(String email) {
     if (userPersistence.existsByEmail(email)) {
-        throw new BusinessException(ErrorCode.EMAIL_ALREADY_REGISTERED, email);
+        throw ApiRestException.builder()
+            .reason(ErrorReason.CONFLICT)
+            .source(ErrorSource.BUSINESS_SERVICE)
+            .build();
     }
 }
 ```
@@ -529,7 +536,9 @@ springdoc:
 
 ## Liquibase YAML (G81-POL-033)
 
-For full rules, Gold Standard examples, and audit format, see `references/liquibase.md`.
+For the generation workflow, full rules, Gold Standard examples, and audit format, see `references/liquibase.md`.
+
+**Generation workflow:** ask for the Jira ticket → run `mvn clean compile liquibase:diff -P liquibase -Dissue.name={TICKET}` → validate and fix the generated YAML (Liquibase generates non-compliant output by default).
 
 **File location:** `src/main/resources/db/migrations/{yyyyMMddHHmmss}_{JIRA-TICKET}.yaml`
 
