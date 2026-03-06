@@ -35,24 +35,30 @@ cd /mnt/c/repos/ms-geolocation
 ```
 global66-skills/
 ├── skills/
-│   └── global66-java-dev/
-│       ├── SKILL.md              # ~590 líneas - definición principal del skill
-│       ├── evals/
-│       │   └── evals.json        # 7 casos de evaluación
-│       └── references/           # 12 guías especializadas
-│           ├── srp-patterns.md       # SRP y naming semántico
-│           ├── transactional.md      # Reglas @Transactional
-│           ├── logging.md            # SGSI-POL-005 compliance
-│           ├── sqs.md                # SQS + 4 clases de trazabilidad
-│           ├── swagger.md            # OpenAPI/Swagger
-│           ├── liquibase.md          # G81-POL-033 migraciones DB
-│           ├── api-client.md         # Retrofit client generator
-│           ├── tests.md              # Patrones de testing
-│           ├── sonar.md              # SonarQube coverage + issues
-│           ├── checklist.md          # Checklist pre-entrega
-│           ├── cache.md              # Caché Redis/Caffeine
-│           ├── api-rest.md           # API REST guidelines
-│           └── exceptions.md         # ApiRestException, ErrorReason
+│   ├── global66-java-dev/
+│   │   ├── SKILL.md              # ~590 líneas - definición principal del skill
+│   │   ├── evals/
+│   │   │   └── evals.json        # 12 casos de evaluación
+│   │   └── references/           # 11 guías especializadas
+│   │       ├── srp-patterns.md       # SRP y naming semántico
+│   │       ├── transactional.md      # Reglas @Transactional
+│   │       ├── logging.md            # SGSI-POL-005 compliance
+│   │       ├── sqs.md                # SQS + 4 clases de trazabilidad
+│   │       ├── swagger.md            # OpenAPI/Swagger
+│   │       ├── liquibase.md          # G81-POL-033 migraciones DB
+│   │       ├── api-client.md         # Retrofit client generator
+│   │       ├── tests.md              # Patrones de testing
+│   │       ├── checklist.md          # Checklist pre-entrega
+│   │       ├── cache.md              # Caché Redis/Caffeine
+│   │       ├── api-rest.md           # API REST guidelines
+│   │       └── exceptions.md         # ApiRestException, ErrorReason
+│   └── global66-java-sonar-expert/
+│       ├── SKILL.md              # Definición de la skill de Sonar
+│       ├── assets/
+│       │   └── sonar_rules.xml   # Reglas Sonar MS Base
+│       └── references/
+│           └── sonar-patterns.md # Patrones de fix Sonar -> Global66
+
 ├── global66-java-dev-workspace/
 │   └── iteration-1/            # Resultados de evaluación A/B
 │       ├── endpoint-generation/    # Eval 1: Generar endpoint

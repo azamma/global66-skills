@@ -1,233 +1,68 @@
-# SRP & Semantic Method Patterns — Global66
+# SRP & Semantic Method Patterns
 
-## Why This Matters
+In Global66 microservices, we follow a strict SRP (Single Responsibility Principle) pattern.
+Public methods in the business layer should be orchestration-only, while private methods
+perform specific actions.
 
-Every method should have exactly one reason to change. When you name a method well and keep it
-small, the code reads like a story: the public method tells you *what* happens, the private
-methods tell you *how* each step works.
+## Core Rule: Descriptive Naming
 
-This is not about following rules mechanically — it's about writing code that a new engineer
-can understand at a glance without comments.
+Method names must clearly state what they do. While specific prefixes are common (ensure, validate, check, fetch), they are **examples**. Use whatever prefix or name makes the code's intent obvious to the reader.
 
-## Semantic Prefix Guide
+## Common Semantic Prefixes (Examples)
 
-### `ensure*` — Precondition validation
-Checks a condition that MUST be true before proceeding. Throws an exception if not.
-```java
-private void ensureAccountIsActive(AccountData account) {
-    if (isAccountInactive(account)) {
-        throw accountNotActiveException(account.getId());
-    }
-}
-```
+### 1. Precondition Validation (void)
+Used to check if an operation can proceed. Throws `ApiRestException` if invalid.
+- Examples: `validateEmailIsAvailable`, `ensureUserIsActive`, `checkSufficientBalance`.
 
-### `verify*` — Complex multi-step validation
-Use when the validation involves multiple checks or more complex logic than a single condition.
-```java
-private void verifyTransferEligibility(TransferData transfer) {
-    ensureSufficientBalance(transfer);
-    ensureDestinationIsReachable(transfer.getDestinationCountry());
-    ensureDailyLimitNotExceeded(transfer);
-}
-```
+### 2. Complex Condition Check (void)
+Used for logic that requires multiple steps or data sources.
+- Examples: `verifyTransactionRisk`, `checkLimitCompliance`.
 
-### `guardAgainst*` — Defensive check
-Protects against unexpected or dangerous states.
-```java
-private void guardAgainstDuplicateTransaction(String transactionId) {
-    if (transactionPersistence.existsByTransactionId(transactionId)) {
-        throw duplicateTransactionException(transactionId);
-    }
-}
-```
+### 3. Defensive Guard (void)
+Used at the start of a method to prevent processing invalid states.
+- Examples: `guardAgainstNullInput`, `stopIfAlreadyProcessed`.
 
-### `is*` / `has*` — Boolean predicates
-Pure query — no side effects, no exceptions. Returns true/false only.
-```java
-private boolean isAccountReassignment(DevicePermissionData existing, DevicePermissionData incoming) {
-    return !existing.getUserId().equals(incoming.getUserId());
-}
+### 4. Boolean Predicates (boolean)
+Simple questions about state. Never throw exceptions.
+- Examples: `isEligibleForPromo`, `hasPendingOrders`, `canUpdateStatus`.
 
-private boolean hasExceededDailyLimit(BigDecimal amount, BigDecimal dailyUsed) {
-    return amount.add(dailyUsed).compareTo(DAILY_LIMIT) > 0;
-}
-```
+### 5. Mandatory Retrieval (Domain Object)
+Get an object or throw `NOT_FOUND`.
+- Examples: `fetchUser`, `requireAccount`, `getMandatoryConfig`.
 
-### `fetch*` / `require*` — Get or throw NOT_FOUND
-Fetches a domain object from persistence. Throws NOT_FOUND exception if absent.
-```java
-private UserData fetchUserOrThrow(Integer userId) {
-    return userPersistence.findById(userId)
-        .orElseThrow(() -> userNotFoundException(userId));
-}
-```
+### 6. Query Retrieval (Optional)
+Safe retrieval that might not find anything.
+- Examples: `findOptionalConfig`, `getRecentTransaction`.
 
-### `find*` — Query that returns Optional
-Direct persistence query, returns Optional. Never throws. Used inside `fetch*` or in specific
-query flows where absence is a valid outcome.
-```java
-// In persistence layer
-Optional<UserData> findByEmail(String email);
-```
+### 7. Exception Factory (Exception)
+Centralize exception construction.
+- Examples: `buildUserNotFoundException`, `createConflictException`.
 
-### `build*Exception` — Exception factory methods
-Creates a specific exception. Keeps throw sites clean and centralizes error construction.
-```java
-private BusinessException userNotFoundException(Integer userId) {
-    return new BusinessException(ErrorCode.USER_NOT_FOUND, userId.toString());
-}
+## What to Avoid
 
-private BusinessException accountNotActiveException(Integer accountId) {
-    return new BusinessException(ErrorCode.ACCOUNT_NOT_ACTIVE, accountId.toString());
-}
-```
+- **Generic names**: `processUser`, `handleRequest`, `executeAction`, `validateData`.
+- **Logic in public methods**: If-else blocks, null checks, and repository calls belong in private methods or the persistence layer.
+- **Ambiguous names**: `checkData` (Does it return a boolean? Does it throw an exception? Be specific).
 
----
-
-## Public Method Structure (Template Method Pattern)
-
-Public methods should read as an ordered list of steps. Think of them as the table of contents
-for the operation:
-
-```
-Step 1: Validate preconditions
-Step 2: Fetch existing state (for updates)
-Step 3: Check if change is significant
-Step 4: Persist
-Step 5: Notify / emit events
-```
+## Example Implementation
 
 ```java
-// BAD: public method doing everything inline
+@Override
 @Transactional(rollbackFor = Exception.class)
-public DevicePermissionData updateDevicePermission(Integer userId, DevicePermissionData incoming) {
-    DevicePermissionEntity existing = deviceRepository.findByUserId(userId)
-        .orElseThrow(() -> new RuntimeException("Not found"));
-
-    if (!existing.getUserId().equals(incoming.getUserId())) {
-        existing.setUserId(incoming.getUserId());
-        existing.setStatus(incoming.getStatus());
-    } else if (incoming.getPermissionType() != null) {
-        existing.setPermissionType(incoming.getPermissionType());
-    }
-    return DevicePermissionMapper.INSTANCE.toData(deviceRepository.save(existing));
-}
-```
-
-```java
-// GOOD: public method orchestrates, private methods do the work
-@Transactional(rollbackFor = Exception.class)
-public DevicePermissionData updateDevicePermission(Integer userId, DevicePermissionData incoming) {
-    DevicePermissionData existing = fetchPermissionOrThrow(userId);
-    if (isAccountReassignment(existing, incoming)) {
-        return devicePermissionPersistence.save(mergeReassignment(existing, incoming));
-    }
-    return devicePermissionPersistence.save(mergePermissionUpdate(existing, incoming));
+public UserData registerUser(UserData userData) {
+    // Intent is clear: we validate, then save, then notify.
+    validateEmailIsAvailable(userData.getEmail());
+    UserData saved = userPersistence.save(userData);
+    sendWelcomeNotification(saved);
+    return saved;
 }
 
-private DevicePermissionData fetchPermissionOrThrow(Integer userId) {
-    return devicePermissionPersistence.findByUserId(userId)
-        .orElseThrow(() -> permissionNotFoundException(userId));
-}
-
-private boolean isAccountReassignment(DevicePermissionData existing, DevicePermissionData incoming) {
-    return !existing.getUserId().equals(incoming.getUserId());
-}
-
-private DevicePermissionData mergeReassignment(DevicePermissionData existing,
-                                                DevicePermissionData incoming) {
-    existing.setUserId(incoming.getUserId());
-    existing.setStatus(incoming.getStatus());
-    return existing;
-}
-
-private DevicePermissionData mergePermissionUpdate(DevicePermissionData existing,
-                                                    DevicePermissionData incoming) {
-    existing.setPermissionType(incoming.getPermissionType());
-    return existing;
-}
-
-private BusinessException permissionNotFoundException(Integer userId) {
-    return new BusinessException(ErrorCode.PERMISSION_NOT_FOUND, userId.toString());
-}
-```
-
----
-
-## Anti-Pattern Catalog
-
-### Forbidden: Generic method names
-```java
-// BAD
-private void process(UserData data) { ... }
-private void handle(Exception e) { ... }
-private void validate(String value) { ... }
-private boolean check(AccountData account) { ... }
-
-// GOOD
-private void ensureEmailIsUnique(String email) { ... }
-private void guardAgainstExpiredSession(SessionData session) { ... }
-private boolean isEmailAlreadyRegistered(String email) { ... }
-```
-
-### Forbidden: Inline boolean conditions
-```java
-// BAD
-if (!userRepository.findByEmail(email).isPresent()) {
-    throw new RuntimeException("User not found");
-}
-
-// GOOD
-private void ensureUserExistsByEmail(String email) {
-    if (isEmailNotRegistered(email)) {
-        throw userNotFoundByEmailException(email);
+private void validateEmailIsAvailable(String email) {
+    if (userPersistence.existsByEmail(email)) {
+        throw ApiRestException.builder()
+            .reason(ErrorReason.CONFLICT)
+            .source(ErrorSource.BUSINESS_SERVICE)
+            .build();
     }
 }
-
-private boolean isEmailNotRegistered(String email) {
-    return !userPersistence.existsByEmail(email);
-}
 ```
-
-### Forbidden: Inline exception construction
-```java
-// BAD
-throw new BusinessException(ErrorCode.USER_NOT_FOUND, userId.toString());
-
-// GOOD
-throw userNotFoundException(userId);
-
-private BusinessException userNotFoundException(Integer userId) {
-    return new BusinessException(ErrorCode.USER_NOT_FOUND, userId.toString());
-}
-```
-
-### Forbidden: Business logic in lambda
-```java
-// BAD
-userPersistence.findById(userId)
-    .ifPresent(user -> {
-        user.setStatus(UserStatus.ACTIVE);
-        if (user.getEmail() != null) {
-            notificationService.sendWelcome(user.getEmail());
-        }
-        userPersistence.save(user);
-    });
-
-// GOOD
-UserData user = fetchUserOrThrow(userId);
-activateUser(user);
-notifyUserWelcome(user);
-```
-
----
-
-## SRP Checklist
-
-Before committing a method, ask:
-- Does the name describe EXACTLY one action? (no "and"/"or" in the name)
-- Would a new team member understand what it does without reading the body?
-- Does it have exactly ONE reason to change?
-- Is it clearly one of: Validation, Query, Fetch, Orchestration, or Factory?
-- Is the nesting depth ≤ 2?
-- Are there ≤ 4 parameters?

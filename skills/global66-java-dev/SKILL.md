@@ -81,10 +81,12 @@ com.global.{domain}/
 2. **No direct repository injection in services** — always go through `*Persistence` ports
 3. **`@Transactional(rollbackFor = Exception.class)`** only in the Business layer, never on HTTP/client calls
 4. **Max 3 injected dependencies per service**
-5. **Controllers are thin** — validate input, delegate to service, map response. No logic.
-6. **Public methods orchestrate; private methods do one thing**
-7. **No comments in code** — never add `//` or `/* */` comments unless the user explicitly asks for them
-8. **Only `ApiRestException` is allowed** — `new RuntimeException()`, `new Exception()`, `new IllegalArgumentException()`, or any other raw exception type is STRICTLY FORBIDDEN. Every exception must use `ApiRestException.builder()` with `ErrorReason` and `ErrorSource`
+5. **Controllers are thin** — validate input, delegate to service, map response. **No logic allowed in presentation layer.**
+6. **Mappers must be logic-free** — they only translate fields. Any logic belongs to the calling layer.
+7. **Public methods orchestrate; private methods do one thing.** Naming must be descriptive of the action (e.g., `validate*`, `check*`, `ensure*`, `fetch*`, `build*`).
+8. **No comments in code** — never add `//` or `/* */` comments unless the user explicitly asks for them.
+9. **Only `ApiRestException` is allowed** — `new RuntimeException()`, `new Exception()`, `new IllegalArgumentException()`, or any other raw exception type is STRICTLY FORBIDDEN. Every exception must use `ApiRestException.builder()` with `ErrorReason` and `ErrorSource`.
+10. **Repositories must avoid multiple joins** — keep queries simple and performant.
 
 ## @Transactional Rules
 
@@ -122,12 +124,14 @@ public class UserControllerImpl implements UserController {
 
     @GetMapping("/{userId}")
     public UserResponse getUser(@PathVariable Integer userId) {
+        // Return in a single line whenever possible. No logic here.
         return UserPresentationMapper.INSTANCE.toResponse(userService.findUser(userId));
     }
 }
 ```
 
 - Response: `record` · Request: `@Data` with `@NotNull`/`@NotBlank` · DTOs: `@Schema`
+- **Rule**: Return should be in a single line. **No logic in this layer.**
 
 ### Business Layer
 
@@ -141,14 +145,17 @@ public class CreateUserServiceImpl implements CreateUserService {
 
     @Override @Transactional(rollbackFor = Exception.class)
     public UserData createUser(UserData userData) {
-        ensureUserDoesNotExist(userData.getEmail());
+        // Descriptive private method names (e.g., validate, check, ensure)
+        validateUserDoesNotExist(userData.getEmail());
         UserData saved = userPersistence.save(userData);
         notificationService.notifyWelcome(saved);
         return saved;
     }
-    private void ensureUserDoesNotExist(String email) { ... }
+    private void validateUserDoesNotExist(String email) { ... }
 }
 ```
+
+- **Rule**: All business logic lives here. Use descriptive private methods for sub-tasks.
 
 ### Persistence Layer
 
@@ -193,6 +200,7 @@ public interface UserMapper {
 - `persistence/mapper/` — entity ↔ domain
 - `presentation/mapper/` — domain ↔ response/request
 - `client/mapper/` — external DTO ↔ domain
+- **Rule**: **No logic in mappers.** They are only for field mapping.
 
 ### Client Layer (Retrofit)
 
@@ -235,17 +243,19 @@ public class MapBoxClientImpl implements MapBoxClient {
 
 For full details and examples, see `references/srp-patterns.md`.
 
-### Quick Reference
+### Quick Reference (Examples)
 
 | Prefix | Purpose | Returns | Throws? |
 |--------|---------|---------|---------|
-| `ensure*` | Precondition validation | void | Yes |
-| `verify*` | Complex condition check | void | Yes |
+| `validate*` / `ensure*` | Precondition validation | void | Yes |
+| `check*` / `verify*` | Complex condition check | void | Yes |
 | `guardAgainst*` | Defensive check | void | Yes |
 | `is*` / `has*` | Boolean predicate | boolean | No |
 | `fetch*` / `require*` | Get or throw NOT_FOUND | Domain object | Yes |
 | `find*` | Query persistence | Optional | No |
 | `build*Exception` | Exception factory | Exception | No |
+
+**Key Rule**: Method names must be descriptive so their purpose is clear upon reading. The prefixes above are common examples but not restrictive.
 
 ## Exception Handling
 
@@ -306,7 +316,7 @@ throw ApiRestException.builder()
 - **Public methods**: max 10 lines, orchestration only — no `if-else`, no null checks, no direct persistence calls
 - **Private methods**: max 8 lines, single responsibility
 - **Max nesting depth**: 2 · **Max parameters**: 4
-- **Forbidden names**: `process`, `handle`, `execute`, `validate`, `check` — always be specific
+- **Forbidden names**: `process`, `handle`, `execute` — always be specific. `validate`, `check`, `ensure`, `verify` are good for private methods.
 
 ```java
 // BAD: generic name, direct repository, inline exceptions
@@ -314,10 +324,10 @@ public void processUser(UserData data) { ... }
 
 // GOOD: orchestration + semantic private methods
 public void registerUser(UserData data) {
-    ensureEmailIsAvailable(data.getEmail());
+    validateEmailIsAvailable(data.getEmail());
     userPersistence.save(data);
 }
-private void ensureEmailIsAvailable(String email) {
+private void validateEmailIsAvailable(String email) {
     if (userPersistence.existsByEmail(email)) {
         throw ApiRestException.builder()
             .reason(ErrorReason.CONFLICT)
@@ -386,6 +396,7 @@ public interface UserRepository extends JpaRepository<UserEntity, Integer> {
 | `REPO_MULTI_ATTR` | Multiple attributes → return `Optional<RecordProjection>` with descriptive name |
 | `REPO_RECORD_NAMING` | Projection records named `{Entity}{Purpose}Data` or `{Purpose}Data` (e.g., `UserSummaryData`, `UserInfoData`) |
 | `REPO_LIST_PROJECTION` | List queries can return `List<Projection>` — still no entities |
+| `REPO_NO_MANY_JOINS` | Avoid complex queries with multiple joins. Keep them efficient. |
 
 > **Why:** Returning entities couples the query result to the persistence layer, bypassing the hexagonal architecture. Projections are lightweight, immutable, and follow SRP.
 
@@ -401,20 +412,7 @@ For full testing guide, coverage requirements, and examples, see `references/tes
 
 ## SonarQube
 
-For the full coverage workflow (git diff + Sonar report) and the Sonar rule → Global66 fix mapping, see `references/sonar.md`.
-
-**Coverage gaps** (user provides git diff + Sonar uncovered lines):
-- Scope: only new/modified methods from the diff
-- Extend existing test class if it exists; create new one if not
-- Complex DTOs always from JSON fixtures in `src/test/resources/`
-- Target: 100% of new lines covered
-
-**Issues resolution** (user provides Sonar report):
-- Prioritize CRITICAL (vulnerabilities, bugs) → MAJOR (complexity, duplication) → MINOR (style)
-- `java:S3776` Cognitive Complexity → extract to `ensure*/verify*/is*/has*` private methods (SRP pattern)
-- `java:S112` Generic exception → `ApiRestException` with `ErrorReason` and `ErrorSource`
-- `java:S107` Too many parameters → wrap in `*Data` domain object, never Builder Pattern
-- `java:S106` System.out → `@Slf4j` + `log.*` following SGSI-POL-005
+SonarQube code reviews, coverage gap analysis, and issue resolution are now handled by the specialized skill **`global66-java-sonar-expert`**. Use that skill for any Sonar-related tasks to ensure compliance with the MS Base profile and Global66 fix patterns.
 
 ## SQS Configuration
 
@@ -501,15 +499,15 @@ For full details, examples, and the compliance review format, see `references/lo
 @GetMapping("/{userId}")
 public UserResponse getUser(@PathVariable Integer userId) {
     log.info("START - [GET] [/users/{}]: userId={}", userId, userId);
-    UserResponse response = UserPresentationMapper.INSTANCE.toResponse(
-        userService.findUser(userId));
+    // Single line return. No logic.
+    UserResponse response = UserPresentationMapper.INSTANCE.toResponse(userService.findUser(userId));
     log.info("END - [GET] [/users/{}]", userId);
     return response;
 }
 
 // Service (correct — business milestone only, no entry/exit)
 public UserData createUser(UserData userData) {
-    ensureEmailIsAvailable(userData.getEmail());
+    validateEmailIsAvailable(userData.getEmail());
     UserData saved = userPersistence.save(userData);
     log.info("User registered successfully: userId={}", saved.getId());
     return saved;
@@ -542,7 +540,7 @@ public interface PaymentController {
 
     @ErrorResponses(values = {
         @ErrorResponse(reason = ErrorReason.NOT_FOUND, source = ErrorSource.BUSINESS_SERVICE),
-        @ErrorResponse(reason = ErrorReason.CONFLICT, source = ErrorSource.HTTP_CLIENT_COMPONENT)
+        @ErrorResponse(reason = ErrorResponse.CONFLICT, source = ErrorSource.HTTP_CLIENT_COMPONENT)
     })
     @Operation(summary = "Process a payment", description = "Validates and persists a new payment")
     @SecurityRequirement(name = "authB2C")
@@ -615,7 +613,7 @@ For full rules, naming conventions, Redis/Caffeine configuration, and examples, 
 
 ## API REST Guidelines
 
-For full naming conventions, HTTP methods, URL structure, prefixes, and versioning rules, see `references/api-rest.md`.
+For full conventions, HTTP methods, URL structure, prefixes, and versioning rules, see `references/api-rest.md`.
 
 | Rule | Requirement |
 |------|-------------|
