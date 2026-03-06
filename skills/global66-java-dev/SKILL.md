@@ -297,6 +297,10 @@ throw ApiRestException.builder()
     .build();
 ```
 
+> **Naming Convention for ErrorReason:** `{DOMAIN}_{ENTITY}_{CONDITION}` in UPPER_SNAKE_CASE
+> - Examples: `SUBSCRIPTION_BENEFIT_ALREADY_EXISTS`, `SUBSCRIPTION_BUSINESS_NOT_FOUND`
+> - See `references/exceptions.md` for complete guidelines on requesting new errors from architecture team
+
 ## Method Structure Rules
 
 - **Public methods**: max 10 lines, orchestration only — no `if-else`, no null checks, no direct persistence calls
@@ -342,6 +346,48 @@ public class UserEntity {
     private UserStatusEnum status;
 }
 ```
+
+## Repository Patterns
+
+When creating repository methods, **never return the full Entity**. Choose the appropriate return type based on use case:
+
+| Use Case | Return Type | Example |
+|----------|-------------|---------|
+| Single attribute | `Optional<T>` | `Optional<Integer> findUserIdByEmail(String email)` |
+| Multiple attributes | Projection record | `Optional<UserInfoData> findUserInfoById(Integer id)` |
+| Full entity needed | Domain object via Persistence | `Optional<UserData> findById(Integer id)` |
+
+### Projection Records
+
+For queries returning multiple fields but not the full entity, define a record in the same repository file or as a top-level class:
+
+```java
+public interface UserRepository extends JpaRepository<UserEntity, Integer> {
+
+    // Single attribute - Optional<T>
+    @Query("SELECT u.id FROM UserEntity u WHERE u.email = :email")
+    Optional<Integer> findUserIdByEmail(String email);
+
+    // Multiple attributes - Projection record
+    @Query("SELECT u.id, u.email, u.status FROM UserEntity u WHERE u.id = :id")
+    Optional<UserInfoData> findUserInfoById(Integer id);
+
+    // Record projection - defined inside repository or separately
+    record UserInfoData(Integer id, String email, UserStatusEnum status) {}
+}
+```
+
+### Rules
+
+| Rule | Requirement |
+|------|-------------|
+| `REPO_NO_ENTITY_RETURN` | Never return `Entity` from repository methods — always use projections or domain objects |
+| `REPO_SINGLE_ATTR` | Single attribute queries → return `Optional<T>` (Integer, String, Boolean, etc.) |
+| `REPO_MULTI_ATTR` | Multiple attributes → return `Optional<RecordProjection>` with descriptive name |
+| `REPO_RECORD_NAMING` | Projection records named `{Entity}{Purpose}Data` or `{Purpose}Data` (e.g., `UserSummaryData`, `UserInfoData`) |
+| `REPO_LIST_PROJECTION` | List queries can return `List<Projection>` — still no entities |
+
+> **Why:** Returning entities couples the query result to the persistence layer, bypassing the hexagonal architecture. Projections are lightweight, immutable, and follow SRP.
 
 ## Unit Tests
 

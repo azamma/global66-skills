@@ -1,201 +1,279 @@
 # Retrofit API Client — Generation Guide
 
-When creating a new external API client, generate all the following files in order.
-Ask the user for these 4 inputs (infer everything else):
-
-| Input | Example |
-|-------|---------|
-| `ApiName` (PascalCase) | `MapBox`, `HereGeocoder` |
-| `endpointPath` (relative URL) | `api/v1/geocode` |
-| `baseUrl` (local env) | `https://api.mapbox.com/` |
-| `serviceIdentifier` (kebab-case) | `mapbox-api` |
-
-From those inputs, derive:
-- `apiName` = camelCase of `ApiName` (e.g. `mapBox`)
-- `basePackage` = find the package containing a `client/` directory in the project
-- `configPrefix` = `http-client.[serviceIdentifier]`
+When creating a new external API client, you can use the **automated generator script** or generate files manually. The script generates the boilerplate; you customize the Request/Response DTOs and endpoint details.
 
 ---
 
-## Files to Generate
+## Automated Generation (Recommended)
 
-### 1. DTOs (`client/dto/`)
+### Prerequisites
+
+Ensure the project has the required structure:
+```
+src/main/java/com/global/{domain}/
+├── client/
+├── config/RestClientConfig.java
+├── config/endpoints/EndpointsConfig.java
+└── domain/external_request/
+```
+
+### Step 1: Gather Information from User
+
+Before running the generator, collect these 4 required inputs:
+
+| Input | Description | Example |
+|-------|-------------|---------|
+| `ApiName` | PascalCase service name | `MapBox`, `HereGeocoder`, `PaymentGateway` |
+| `endpointPath` | Relative API path | `api/v1/geocode`, `v2/payments` |
+| `baseUrl` | Base URL for local env | `https://api.mapbox.com/`, `https://payments.example.com` |
+| `serviceIdentifier` | kebab-case YAML key | `mapbox-api`, `payment-gateway` |
+
+**Optional but recommended:**
+- Does the API require credentials? (apiKey, token, etc.)
+- CURL example (for inferring HTTP method, headers, request/response structure)
+- Sample request/response JSON
+
+### Step 2: Run the Generator
+
+```bash
+# From the Java project root
+python /mnt/c/repos/retrofit-client-generator/generate.py
+```
+
+The script will:
+1. Detect the base package by finding the `client/` directory
+2. Generate all 9 boilerplate files (see below)
+3. Add configuration to `RestClientConfig.java`, `EndpointsConfig.java`, and `application-local.yml`
+
+### Step 3: Customize Generated Files
+
+The script creates placeholder files. You must customize:
+
+#### 3.1 DTOs (`client/dto/`)
+
+Fill in the actual fields based on the API spec or CURL:
+
+```java
+// MapBoxRequestDto.java
+public record MapBoxRequestDto(
+    @JsonProperty("query") String query,
+    @JsonProperty("limit") Integer limit,
+    @JsonProperty("country") String country
+) {}
+
+// MapBoxResponseDto.java
+public record MapBoxResponseDto(
+    @JsonProperty("features") List<FeatureDto> features,
+    @JsonProperty("attribution") String attribution
+) {
+    public record FeatureDto(
+        @JsonProperty("id") String id,
+        @JsonProperty("place_name") String placeName,
+        @JsonProperty("center") List<Double> center
+    ) {}
+}
+```
+
+#### 3.2 Domain Objects (`domain/external_request/`)
+
+Create the internal domain representation:
+
+```java
+// MapBoxRequest.java
+public record MapBoxRequest(String query, Integer limit, String countryCode) {}
+
+// MapBoxResponse.java
+public record MapBoxResponse(
+    List<GeolocationFeature> features,
+    String attribution
+) {}
+```
+
+#### 3.3 Update Retrofit API Interface
+
+Adjust HTTP method, path, headers, and parameters based on the actual API:
+
+```java
+// Before (generated):
+public interface MapBoxApi {
+    @Headers("Accept: application/json")
+    @POST("api/v1/geocode")
+    Call<MapBoxResponseDto> createMapBox(...);
+}
+
+// After (customized):
+public interface MapBoxApi {
+    @GET("geocoding/v5/mapbox.places/{query}.json")
+    Call<MapBoxResponseDto> geocode(
+        @Path("query") String query,
+        @Query("access_token") String token,
+        @Query("limit") Integer limit,
+        @Query("country") String country
+    );
+}
+```
+
+**Common adjustments:**
+- Change `@POST` to `@GET`, `@PUT`, `@PATCH`, or `@DELETE`
+- Add `@Path` variables for URL segments
+- Add `@Query` parameters
+- Add `@Header` for dynamic headers
+- Add static headers with `@Headers("X-API-Key: ...")`
+
+#### 3.4 Update Client Implementation
+
+Adjust the client method to match the API interface:
+
+```java
+@Component @RequiredArgsConstructor
+public class MapBoxClientImpl implements MapBoxClient {
+    private final MapBoxApi mapBoxApi;
+
+    @Override
+    public MapBoxResponse geocode(MapBoxRequest request, String token) {
+        MapBoxRequestDto dto = MapBoxRequestClientMapper.INSTANCE.toDto(request);
+
+        Call<MapBoxResponseDto> call = mapBoxApi.geocode(
+            dto.query(),
+            token,
+            dto.limit(),
+            dto.country()
+        );
+        Response<MapBoxResponseDto> response = checkCallExecute(call, HTTP_CLIENT_COMPONENT);
+
+        return MapBoxResponseClientMapper.INSTANCE.toModel(
+            checkResponse(response, HTTP_CLIENT_COMPONENT)
+        );
+    }
+}
+```
+
+#### 3.5 Update Mappers
+
+Add field mappings if needed:
+
+```java
+@Mapper(componentModel = "default", ...)
+public interface MapBoxRequestClientMapper {
+    MapBoxRequestClientMapper INSTANCE = Mappers.getMapper(MapBoxRequestClientMapper.class);
+
+    @Mapping(source = "countryCode", target = "country")  // different field names
+    MapBoxRequestDto toDto(MapBoxRequest request);
+}
+```
+
+### Step 4: Validation Checklist
+
+- [ ] DTOs match the actual API request/response structure
+- [ ] HTTP method (`@GET`/`@POST`/`@PUT`/`@PATCH`/`@DELETE`) is correct
+- [ ] Path variables (`@Path`) match URL segments
+- [ ] Query parameters (`@Query`) match API spec
+- [ ] Headers (`@Header`, `@Headers`) are correct
+- [ ] Mappers convert all fields correctly
+- [ ] Client implementation method signature matches the API
+- [ ] `application-local.yml` has correct `base-url`
+- [ ] Add credentials to `credentials` section in YAML if needed
+
+---
+
+## Manual Generation (Alternative)
+
+If you cannot use the script, generate these 9 files manually:
+
+### Files to Generate
+
+#### 1. DTOs (`client/dto/`)
 
 ```java
 // [ApiName]RequestDto.java
 package [basePackage].client.dto;
 
-public record [ApiName]RequestDto(/* TODO: Add fields */) {}
+public record [ApiName]RequestDto(/* fields */) {}
 
 // [ApiName]ResponseDto.java
 package [basePackage].client.dto;
 
-public record [ApiName]ResponseDto(/* TODO: Add fields */) {}
+public record [ApiName]ResponseDto(/* fields */) {}
 ```
 
-### 2. Domain objects (`domain/external_request/`)
-
-External API domain objects live in `external_request/`, not in `data/`.
-They are the domain representation of external API calls — decoupled from the DTO wire format.
+#### 2. Domain objects (`domain/external_request/`)
 
 ```java
 // [ApiName]Request.java
 package [basePackage].domain.external_request;
 
-public record [ApiName]Request(/* TODO: Add fields */) {}
+public record [ApiName]Request(/* fields */) {}
 
 // [ApiName]Response.java
 package [basePackage].domain.external_request;
 
-public record [ApiName]Response(/* TODO: Add fields */) {}
+public record [ApiName]Response(/* fields */) {}
 ```
 
-### 3. Mappers (`client/mapper/`)
-
-Two separate mappers: one for request, one for response.
-Use the full `@Mapper` config consistent with all other mappers in the project.
+#### 3. Mappers (`client/mapper/`)
 
 ```java
 // [ApiName]RequestClientMapper.java
-package [basePackage].client.mapper;
-
-import [basePackage].client.dto.[ApiName]RequestDto;
-import [basePackage].domain.external_request.[ApiName]Request;
-import org.mapstruct.Mapper;
-import org.mapstruct.NullValueCheckStrategy;
-import org.mapstruct.NullValuePropertyMappingStrategy;
-import org.mapstruct.factory.Mappers;
-
 @Mapper(
     componentModel = "default",
     nullValueCheckStrategy = NullValueCheckStrategy.ALWAYS,
     nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
 public interface [ApiName]RequestClientMapper {
     [ApiName]RequestClientMapper INSTANCE = Mappers.getMapper([ApiName]RequestClientMapper.class);
-
-    [ApiName]RequestDto toDto([ApiName]Request [apiName]Request);
+    [ApiName]RequestDto toDto([ApiName]Request request);
 }
 
 // [ApiName]ResponseClientMapper.java
-package [basePackage].client.mapper;
-
-import [basePackage].client.dto.[ApiName]ResponseDto;
-import [basePackage].domain.external_request.[ApiName]Response;
-import org.mapstruct.Mapper;
-import org.mapstruct.NullValueCheckStrategy;
-import org.mapstruct.NullValuePropertyMappingStrategy;
-import org.mapstruct.factory.Mappers;
-
 @Mapper(
     componentModel = "default",
     nullValueCheckStrategy = NullValueCheckStrategy.ALWAYS,
     nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
 public interface [ApiName]ResponseClientMapper {
     [ApiName]ResponseClientMapper INSTANCE = Mappers.getMapper([ApiName]ResponseClientMapper.class);
-
-    [ApiName]Response toModel([ApiName]ResponseDto [apiName]ResponseDto);
+    [ApiName]Response toModel([ApiName]ResponseDto dto);
 }
 ```
 
-### 4. Client interface (`client/rest/`)
-
-The interface is the port. Business layer only knows this interface, not the impl or the Retrofit Api.
+#### 4. Client interface (`client/rest/`)
 
 ```java
-// [ApiName]Client.java
-package [basePackage].client.rest;
-
-import [basePackage].domain.external_request.[ApiName]Request;
-import [basePackage].domain.external_request.[ApiName]Response;
-
 public interface [ApiName]Client {
-    [ApiName]Response create[ApiName](String token, [ApiName]Request [apiName]Request);
+    [ApiName]Response methodName([ApiName]Request request, String token);
 }
 ```
 
-### 5. Retrofit API interface (`client/rest/api/`)
+#### 5. Retrofit API interface (`client/rest/api/`)
 
 ```java
-// [ApiName]Api.java
-package [basePackage].client.rest.api;
-
-import [basePackage].client.dto.[ApiName]RequestDto;
-import [basePackage].client.dto.[ApiName]ResponseDto;
-import retrofit2.Call;
-import retrofit2.http.Body;
-import retrofit2.http.Header;
-import retrofit2.http.Headers;
-import retrofit2.http.POST;
-
 public interface [ApiName]Api {
-
     @Headers("Accept: application/json")
-    @POST("[endpointPath]")
-    Call<[ApiName]ResponseDto> create[ApiName](
+    @POST("endpoint/path")
+    Call<[ApiName]ResponseDto> methodName(
         @Header("Authorization") String token,
-        @Body [ApiName]RequestDto [apiName]RequestDto);
+        @Body [ApiName]RequestDto dto);
 }
 ```
 
-Adjust `@GET`/`@POST`/`@PUT` and path annotations to match the actual endpoint.
-For query params use `@Query`, for path segments use `@Path`.
-
-### 6. Client implementation (`client/rest/impl/`)
+#### 6. Client implementation (`client/rest/impl/`)
 
 ```java
-// [ApiName]ClientImpl.java
-package [basePackage].client.rest.impl;
-
-import static com.global.rest.exception.enums.ErrorSource.HTTP_CLIENT_COMPONENT;
-import static com.global.rest.exception.utils.RetrofitUtils.checkCallExecute;
-import static com.global.rest.exception.utils.RetrofitUtils.checkResponse;
-
-import [basePackage].client.dto.[ApiName]RequestDto;
-import [basePackage].client.dto.[ApiName]ResponseDto;
-import [basePackage].client.mapper.[ApiName]RequestClientMapper;
-import [basePackage].client.mapper.[ApiName]ResponseClientMapper;
-import [basePackage].client.rest.[ApiName]Client;
-import [basePackage].client.rest.api.[ApiName]Api;
-import [basePackage].domain.external_request.[ApiName]Request;
-import [basePackage].domain.external_request.[ApiName]Response;
-import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Component;
-import retrofit2.Call;
-import retrofit2.Response;
-
-@Component
-@RequiredArgsConstructor
+@Component @RequiredArgsConstructor
 public class [ApiName]ClientImpl implements [ApiName]Client {
-
-    private final [ApiName]Api [apiName]Api;
+    private final [ApiName]Api apiNameApi;
 
     @Override
-    public [ApiName]Response create[ApiName](String token, [ApiName]Request [apiName]Request) {
-        [ApiName]RequestDto [apiName]RequestDto =
-            [ApiName]RequestClientMapper.INSTANCE.toDto([apiName]Request);
-
-        Call<[ApiName]ResponseDto> call =
-            [apiName]Api.create[ApiName](token, [apiName]RequestDto);
+    public [ApiName]Response methodName([ApiName]Request request, String token) {
+        [ApiName]RequestDto dto = [ApiName]RequestClientMapper.INSTANCE.toDto(request);
+        Call<[ApiName]ResponseDto> call = apiNameApi.methodName(token, dto);
         Response<[ApiName]ResponseDto> response = checkCallExecute(call, HTTP_CLIENT_COMPONENT);
-        [ApiName]ResponseDto [apiName]ResponseDto = checkResponse(response, HTTP_CLIENT_COMPONENT);
-
-        return [ApiName]ResponseClientMapper.INSTANCE.toModel([apiName]ResponseDto);
+        return [ApiName]ResponseClientMapper.INSTANCE.toModel(checkResponse(response, HTTP_CLIENT_COMPONENT));
     }
 }
 ```
 
-Note: `@Component` (not `@Service`) because this is infrastructure, not business logic.
-`checkCallExecute` handles `IOException`; `checkResponse` handles non-2xx HTTP responses.
-Both throw `BusinessException` with `HTTP_CLIENT_COMPONENT` source — no try/catch needed here.
+### Configuration Updates
 
----
-
-## Configuration Files to Update
-
-### 7. `RestClientConfig.java` — add new bean
-
-Add a `@Bean` method for the Retrofit Api interface. The `getRetrofitConfig` and `endpointsConfig`
-helpers are already present in the class; just add the new bean:
+#### 7. `RestClientConfig.java` — add bean
 
 ```java
 @Bean
@@ -207,9 +285,7 @@ public [ApiName]Api [apiName]Api() {
 }
 ```
 
-Also add the import: `import [basePackage].client.rest.api.[ApiName]Api;`
-
-### 8. `EndpointsConfig.java` — add new `@ConfigurationProperties` bean
+#### 8. `EndpointsConfig.java` — add endpoint bean
 
 ```java
 @Bean
@@ -219,19 +295,12 @@ public Endpoint [apiName]Endpoint() {
 }
 ```
 
-The `Endpoint` class is a shared POJO (already in the project) that holds `baseUrl`, `loggingLevel`,
-`readTimeout`, and `connectTimeout`.
-
-### 9. `application-local.yml` — append under `http-client`
-
-Find the existing `http-client:` key and add the new service block underneath — do NOT create
-a duplicate `http-client:` root key:
+#### 9. `application-local.yml` — add config
 
 ```yaml
 http-client:
-  # ... existing entries ...
   [serviceIdentifier]:
-    baseUrl: [baseUrl]
+    baseUrl: https://api.example.com/
     loggingLevel: BODY
     readTimeout: 30
     connectTimeout: 30
@@ -239,19 +308,44 @@ http-client:
 
 ---
 
-## Complete File Checklist
+## Key Patterns
 
-After generation, verify:
+### Architecture Rules
 
-- [ ] `client/dto/[ApiName]RequestDto.java` — record
-- [ ] `client/dto/[ApiName]ResponseDto.java` — record
-- [ ] `domain/external_request/[ApiName]Request.java` — record
-- [ ] `domain/external_request/[ApiName]Response.java` — record
-- [ ] `client/mapper/[ApiName]RequestClientMapper.java` — INSTANCE + full @Mapper config
-- [ ] `client/mapper/[ApiName]ResponseClientMapper.java` — INSTANCE + full @Mapper config
+| Rule | Requirement |
+|------|-------------|
+| `CLIENT_COMPONENT` | Use `@Component` (not `@Service`) — this is infrastructure |
+| `CLIENT_EXTERNAL_DOMAIN` | External API domain objects live in `domain/external_request/` |
+| `CLIENT_TWO_MAPPERS` | Two mappers: `*RequestClientMapper` and `*ResponseClientMapper` |
+| `CLIENT_RETROFIT_UTILS` | Use `checkCallExecute` + `checkResponse` — no try/catch needed |
+| `CLIENT_CONFIG` | Register bean in `RestClientConfig` + `EndpointsConfig` + YAML |
+
+### Retrofit Annotations Reference
+
+| Annotation | Purpose | Example |
+|------------|---------|---------|
+| `@GET` | HTTP GET request | `@GET("users/{id}")` |
+| `@POST` | HTTP POST request | `@POST("api/v1/payments")` |
+| `@PUT` | HTTP PUT request | `@PUT("users/{id}")` |
+| `@PATCH` | HTTP PATCH request | `@PATCH("users/{id}")` |
+| `@DELETE` | HTTP DELETE request | `@DELETE("users/{id}")` |
+| `@Path` | URL path variable | `@Path("id") String userId` |
+| `@Query` | Query parameter | `@Query("page") Integer page` |
+| `@Header` | Dynamic header | `@Header("Authorization") String token` |
+| `@Headers` | Static headers | `@Headers("Accept: application/json")` |
+| `@Body` | Request body | `@Body PaymentRequestDto request` |
+
+### Complete File Checklist
+
+- [ ] `client/dto/[ApiName]RequestDto.java` — record with JSON field names
+- [ ] `client/dto/[ApiName]ResponseDto.java` — record with JSON field names
+- [ ] `domain/external_request/[ApiName]Request.java` — internal domain record
+- [ ] `domain/external_request/[ApiName]Response.java` — internal domain record
+- [ ] `client/mapper/[ApiName]RequestClientMapper.java` — INSTANCE + @Mapper
+- [ ] `client/mapper/[ApiName]ResponseClientMapper.java` — INSTANCE + @Mapper
 - [ ] `client/rest/[ApiName]Client.java` — interface (port)
-- [ ] `client/rest/api/[ApiName]Api.java` — Retrofit interface
-- [ ] `client/rest/impl/[ApiName]ClientImpl.java` — @Component, not @Service
-- [ ] `config/RestClientConfig.java` updated — new `[apiName]Api()` bean
-- [ ] `config/endpoints/EndpointsConfig.java` updated — new `[apiName]Endpoint()` bean
-- [ ] `application-local.yml` updated — block appended under existing `http-client:` key
+- [ ] `client/rest/api/[ApiName]Api.java` — Retrofit interface with correct HTTP method
+- [ ] `client/rest/impl/[ApiName]ClientImpl.java` — @Component, implements interface
+- [ ] `config/RestClientConfig.java` — bean method added
+- [ ] `config/endpoints/EndpointsConfig.java` — endpoint bean added
+- [ ] `application-local.yml` — config block under `http-client:`

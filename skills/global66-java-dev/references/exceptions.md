@@ -257,34 +257,147 @@ public interface CustomerController {
 
 When you need domain-specific errors not available in the library:
 
-1. **DO NOT create local enums** in your microservice. All errors must come from the shared library.
+### Step 1: Use TODO Comments with Generic Errors
 
-2. **Use generic errors with TODO comments** indicating the specific error needed:
+**DO NOT create local enums** in your microservice. All errors must come from the shared library. Use generic errors with TODO comments:
 
 ```java
-// TODO: REWARD_INSUFFICIENT_POINTS (BAD_REQUEST)
-throw ApiRestException.builder()
-    .reason(ErrorReason.BAD_REQUEST)  // Generic - replace once library is updated
-    .source(ErrorSource.BUSINESS_SERVICE)
-    .build();
-
-// TODO: REWARD_ALREADY_CLAIMED (CONFLICT)
+// TODO: SUBSCRIPTION_BENEFIT_ALREADY_EXISTS (CONFLICT)
 throw ApiRestException.builder()
     .reason(ErrorReason.CONFLICT)  // Generic - replace once library is updated
     .source(ErrorSource.BUSINESS_SERVICE)
     .build();
+
+// TODO: SUBSCRIPTION_BUSINESS_NOT_FOUND (NOT_FOUND)
+throw ApiRestException.builder()
+    .reason(ErrorReason.NOT_FOUND)
+    .source(ErrorSource.BUSINESS_SERVICE)
+    .build();
 ```
 
-3. **Request architecture team** to add them to the shared library:
-   - Create a ticket/request to the architecture team
-   - Provide the new `ErrorReason` code name and suggested HTTP status
-   - Include the TODO comment with the exact code you need
-   - Once added to library, replace the generic error with the specific one
+### Step 2: Request New ErrorReason to Architecture Team
 
-4. **Update code after library release**:
-   - Replace generic error with specific `ErrorReason.XXX`
-   - Remove the TODO comment
-   - Example: `ErrorReason.BAD_REQUEST` → `ErrorReason.REWARD_INSUFFICIENT_POINTS`
+Create a ticket/request to the architecture team with the following information:
+
+#### ErrorReason Naming Convention
+
+Format: `{DOMAIN}_{ENTITY}_{CONDITION}`
+
+| Pattern | Example |
+|---------|---------|
+| `{DOMAIN}_{ENTITY}_ALREADY_EXISTS` | `SUBSCRIPTION_BENEFIT_ALREADY_EXISTS` |
+| `{DOMAIN}_{ENTITY}_BUSINESS_{CONDITION}` | `SUBSCRIPTION_BENEFIT_BUSINESS_ALREADY_EXISTS` |
+| `{DOMAIN}_{ENTITY}_NOT_ACTIVE` | `SUBSCRIPTION_AVAILABLE_ACCOUNT_REMUNERATION_NOT_ACTIVE` |
+| `{DOMAIN}_{ENTITY}_NOT_FOUND` | `SUBSCRIPTION_BUSINESS_NOT_FOUND` |
+| `{DOMAIN}_{ENTITY}_NOT_{ROLE}` | `SUBSCRIPTION_BUSINESS_NOT_PARTNER` |
+| `{DOMAIN}_{ENTITY}_{CONTEXT}_NOT_FOUND` | `SUBSCRIPTION_PLAN_COUNTRY_NOT_FOUND` |
+
+**Naming Rules:**
+- Always use **UPPER_SNAKE_CASE**
+- Start with the **domain prefix** (e.g., `SUBSCRIPTION_`, `TRANSACTION_`, `CUSTOMER_`)
+- Include the **entity name** (e.g., `BENEFIT`, `BUSINESS`, `PLAN`)
+- End with the **condition** (e.g., `ALREADY_EXISTS`, `NOT_FOUND`, `NOT_ACTIVE`)
+- Be specific and descriptive - avoid generic terms like `INVALID` or `ERROR`
+
+#### Required Information for Architecture Team
+
+For each new `ErrorReason`, provide:
+
+1. **ErrorReason name** (following naming convention above)
+2. **HTTP Status Code** (e.g., 400, 404, 409, 422)
+3. **Error Code** (numeric format, e.g., `060405`)
+4. **Description** for the `ErrorCode` enum (detailed format)
+
+**Description Format for ErrorCode:**
+
+```
+Error response when [specific condition in clear, descriptive language].
+```
+
+**Examples:**
+
+| ErrorReason | HTTP Status | Error Code | Description for ErrorCode enum |
+|-------------|-------------|------------|-------------------------------|
+| `SUBSCRIPTION_BENEFIT_ALREADY_EXISTS` | 409 | 060405 | Error response when the subscription benefit already exists for the given customer. |
+| `SUBSCRIPTION_BUSINESS_NOT_FOUND` | 404 | 060406 | Error response when the requested business is not found in the subscription context. |
+| `SUBSCRIPTION_PLAN_COUNTRY_NOT_FOUND` | 404 | 060407 | Error response when the requested plan configuration for the given country is not found or is inactive. |
+| `SUBSCRIPTION_PLAN_DOWNGRADE_NOT_ALLOWED` | 422 | 060408 | Error response when the customer attempts to subscribe to a plan with a tier level equal or lower than the current active plan. |
+
+**Complete Example Request to Architecture:**
+
+```
+Subject: Request for new ErrorReason and ErrorCode - Subscription Domain
+
+Hi Architecture Team,
+
+I need the following new error codes added to the shared exception library:
+
+1. ErrorReason: SUBSCRIPTION_BENEFIT_ALREADY_EXISTS
+   - HTTP Status: 409 CONFLICT
+   - Error Code: 060405
+   - Description: Error response when the subscription benefit already exists for the given customer.
+
+2. ErrorReason: SUBSCRIPTION_BUSINESS_NOT_FOUND
+   - HTTP Status: 404 NOT_FOUND
+   - Error Code: 060406
+   - Description: Error response when the requested business is not found in the subscription context.
+
+3. ErrorReason: SUBSCRIPTION_BUSINESS_NOT_PARTNER
+   - HTTP Status: 422 UNPROCESSABLE_ENTITY
+   - Error Code: 060407
+   - Description: Error response when the business is not registered as a partner in the subscription system.
+
+These are needed for the subscription validation flows in the ms-subscription microservice.
+
+Thanks!
+```
+
+### Step 3: Request New ErrorSource (if needed)
+
+If none of the existing `ErrorSource` values fit your use case, request a new one:
+
+**ErrorSource Naming Convention:**
+
+Format: `{LAYER}_{COMPONENT}` or `ADAPTER_{EXTERNAL_SYSTEM}` or `HTTP_CLIENT_{SYSTEM}`
+
+| Pattern | Examples |
+|---------|----------|
+| `ADAPTER_{EXTERNAL_SYSTEM}` | `ADAPTER_STRIPE`, `ADAPTER_PAYPAL` |
+| `HTTP_CLIENT_{SYSTEM}` | `HTTP_CLIENT_STRIPE`, `HTTP_CLIENT_PAYPAL` |
+| `{LAYER}_{COMPONENT}` | `BUSINESS_VALIDATOR`, `PERSISTENCE_CACHE` |
+
+**Existing ErrorSource values** (use these first):
+- `BUSINESS_SERVICE`, `DATA_REPOSITORY`, `REST_CONTROLLER`
+- `ADAPTER_COMPONENT`, `ADAPTER_JUMIO`, `ADAPTER_TRUORA`
+- `HTTP_CLIENT_COMPONENT`, `HTTP_CLIENT_JUMIO`, `HTTP_CLIENT_TRUORA`, `HTTP_CLIENT_IBAN`
+- `COGNITO_SERVICE`, `ITERABLE_SERVICE`
+- `UTILS`, `HELPER_COMPONENT`
+
+### Step 4: Update Code After Library Release
+
+Once the architecture team adds the errors to the shared library:
+
+1. Update your `pom.xml` (or `build.gradle`) to the new library version
+2. Replace generic error with specific `ErrorReason.XXX`
+3. Remove the TODO comment
+4. Update `ErrorSource` if a new specific one was created
+
+**Before:**
+```java
+// TODO: SUBSCRIPTION_BENEFIT_ALREADY_EXISTS (CONFLICT)
+throw ApiRestException.builder()
+    .reason(ErrorReason.CONFLICT)
+    .source(ErrorSource.BUSINESS_SERVICE)
+    .build();
+```
+
+**After:**
+```java
+throw ApiRestException.builder()
+    .reason(ErrorReason.SUBSCRIPTION_BENEFIT_ALREADY_EXISTS)
+    .source(ErrorSource.BUSINESS_SERVICE)
+    .build();
+```
 
 ## Common Violations
 
@@ -310,3 +423,16 @@ throw ApiRestException.builder()
 - [ ] Business layer uses `BUSINESS_SERVICE` source
 - [ ] Controller layer uses `REST_CONTROLLER` source
 - [ ] HTTP clients use `HTTP_CLIENT_*` sources
+
+## ErrorReason/ErrorSource Request Checklist
+
+When requesting new errors from architecture team:
+
+- [ ] ErrorReason follows `{DOMAIN}_{ENTITY}_{CONDITION}` format
+- [ ] ErrorReason is in UPPER_SNAKE_CASE
+- [ ] HTTP status code is specified (400, 404, 409, 422, 500, etc.)
+- [ ] Numeric error code is provided (e.g., 060405)
+- [ ] Description follows format: "Error response when [condition]."
+- [ ] Description is clear and descriptive
+- [ ] ErrorSource matches existing values or follows naming convention
+- [ ] TODO comments in code reference the exact ErrorReason name needed
