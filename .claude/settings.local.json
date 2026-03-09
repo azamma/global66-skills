@@ -13,7 +13,8 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(cp -r /mnt/c/repos/global66-skills/skills/global66-db-ops /root/.claude/skills/)",
-      "Read(//root/.claude/skills/**)"
+      "Read(//root/.claude/skills/**)",
+      "Bash(rm:*)"
     ]
   }
 }
