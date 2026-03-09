@@ -9,7 +9,8 @@
       "Bash(rsync:*)",
       "Bash(ls:*)",
       "mcp__plugin_claude-mem_mcp-search__save_memory",
-      "Bash(cp:*)"
+      "Bash(cp:*)",
+      "Bash(git add:*)"
     ]
   }
 }

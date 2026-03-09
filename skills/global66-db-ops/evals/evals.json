@@ -1,0 +1,54 @@
+{
+  "skill_name": "global66-db-ops",
+  "evals": [
+    {
+      "id": 1,
+      "name": "query-recent-records",
+      "prompt": "Dame los últimos 15 registros de la tabla users en el environment dev. Necesito ver qué datos hay ahí para validar una migración.",
+      "expected_output": "Claude debería: (1) preguntar/obtener credenciales, (2) listar esquemas o asumir 'subscription', (3) describir tabla users, (4) ejecutar query_table.py con --limit 15 --env dev. Resultado: tabla con registros mostrados.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "search-tables-by-pattern",
+      "prompt": "Busca todas las tablas que contengan 'customer' en su nombre. Necesito saber si existe una tabla customers o customer_profile.",
+      "expected_output": "Claude debería: (1) obtener credenciales si falta, (2) ejecutar search_metadata.py 'customer' --env dev, (3) para cada tabla encontrada, describir su estructura, (4) mostrar resultado de búsqueda con columnas principales.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "validate-table-structure",
+      "prompt": "Revisa la estructura actual de la tabla payments. Necesito validar que la columna 'status' y 'amount' existan después del cambio Liquibase que acabo de aplicar.",
+      "expected_output": "Claude debería: (1) obtener credenciales, (2) ejecutar describe_table.py subscription payments --env dev, (3) mostrar columnas, tipos, claves primarias, (4) validar que 'status' y 'amount' existan. Resultado: estructura de tabla con validación.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "name": "export-data-to-csv",
+      "prompt": "Exporta los últimos 50 registros de la tabla transactions a CSV. Los necesito para un análisis externo.",
+      "expected_output": "Claude debería: (1) obtener credenciales, (2) describir tabla transactions, (3) ejecutar query_table.py subscription transactions --limit 50 --export --env dev, (4) indicar dónde se guardó el CSV (exports/transactions_recent.csv).",
+      "files": []
+    },
+    {
+      "id": 5,
+      "name": "debug-foreign-key-error",
+      "prompt": "Estoy viendo una excepción ForeignKeyException en la tabla orders. Dice algo sobre customer_id. Revisa qué está pasando en la tabla customers.",
+      "expected_output": "Claude debería: (1) obtener credenciales, (2) describir tabla customers (ver claves primarias, índices), (3) describir tabla orders (ver claves foráneas hacia customers), (4) query_table.py para auditar datos, (5) diagnosticar el problema (ej: FK constraint, datos huérfanos).",
+      "files": []
+    },
+    {
+      "id": 6,
+      "name": "audit-migrations",
+      "prompt": "Necesito auditar qué cambios de base de datos se aplicaron en los últimos días. ¿Qué hay en el log de Liquibase?",
+      "expected_output": "Claude debería: (1) obtener credenciales, (2) ejecutar query_table.py subscription DATABASECHANGELOG --limit 50 --env dev, (3) mostrar ID, author, descripción, fecha de ejecución de los últimos cambios, (4) filtrar por fecha si es posible.",
+      "files": []
+    },
+    {
+      "id": 7,
+      "name": "wrong-environment-safety",
+      "prompt": "Quiero los datos de la tabla users pero no estoy seguro de si debería ser dev o ci. ¿Cuál es?",
+      "expected_output": "Claude debería: (1) **preguntar explícitamente cuál es el environment correcto**, (2) NO asumir ni ejecutar en uno sin confirmar, (3) mencionar que --env ci es rojo/peligroso (producción), (4) confirmar una vez que el usuario diga cuál es, (5) ejecutar con --env correcto.",
+      "files": []
+    }
+  ]
+}
