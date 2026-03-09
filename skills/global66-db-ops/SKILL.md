@@ -17,6 +17,25 @@ description: >
 
 Esta skill proporciona un flujo de trabajo estándar para interactuar con las bases de datos de Global66 (entornos CI/DEV), integrando la obtención de credenciales desde el Config Server y la exploración de datos mediante scripts especializados.
 
+## 📍 Ubicación de Scripts
+
+Los scripts Python se encuentran en:
+```
+/root/.claude/skills/global66-db-ops/scripts/
+├── list_schemas.py
+├── list_tables.py
+├── describe_table.py
+├── query_table.py
+├── search_metadata.py
+├── backup_table.py
+├── backup_schema.py
+└── utils/
+    ├── db_connect.py
+    └── constants.py
+```
+
+**IMPORTANTE**: Todos los comandos deben usar la ruta completa: `/root/.claude/skills/global66-db-ops/scripts/script_name.py`
+
 ## Cuándo usar esta skill
 
 Claude debería usar esta skill cuando:
@@ -51,15 +70,15 @@ Si el usuario no proporciona credenciales explícitamente:
 ### 2️⃣ Exploración de Esquema (Si es desconocido)
 
 Si el usuario no menciona el schema:
-- Lista esquemas: `python3 scripts/list_schemas.py --env {env}`
-- Una vez identificado el schema, lista tablas: `python3 scripts/list_tables.py {schema} --env {env}`
+- Lista esquemas: `python3 /root/.claude/skills/global66-db-ops/scripts/list_schemas.py --env {env}`
+- Una vez identificado el schema, lista tablas: `python3 /root/.claude/skills/global66-db-ops/scripts/list_tables.py {schema} --env {env}`
 
 Si el usuario ya mencionó el schema (ej: "subscription"), salta a paso 3.
 
 ### 3️⃣ Análisis de Estructura
 
 Antes de consultar datos:
-- Describe la tabla: `python3 scripts/describe_table.py {schema} {table} --env {env}`
+- Describe la tabla: `python3 /root/.claude/skills/global66-db-ops/scripts/describe_table.py {schema} {table} --env {env}`
 - Esto muestra columnas, tipos, claves primarias e índices
 - Si hay relaciones con otras tablas, describilas también
 
@@ -67,51 +86,61 @@ Antes de consultar datos:
 
 Ejecuta la consulta con límites seguros:
 ```bash
-python3 scripts/query_table.py {schema} {table} --limit 10 --env {env}
+python3 /root/.claude/skills/global66-db-ops/scripts/query_table.py {schema} {table} --limit 10 --env {env}
 ```
 
 **Variaciones**:
 - Aumenta `--limit` si el usuario solicita más registros (máx. 1000 para evitar saturación)
-- Usa `--export` si el usuario pide CSV: `--export`
-- Busca por patrón: `python3 scripts/search_metadata.py {pattern} --env {env}`
+- Usa `--export` si el usuario pide CSV con `--export`
+- Busca por patrón: `python3 /root/.claude/skills/global66-db-ops/scripts/search_metadata.py {pattern} --env {env}`
 
 ## Ejemplos de uso
 
 **Ejemplo 1: Usuario dice "Dame los últimos 20 registros de la tabla users en dev"**
-```
-→ Paso 1: Obtener credenciales (si no las tiene)
-→ Paso 2: Schema ya conocido → subscription
-→ Paso 3: describe_table.py subscription users
-→ Paso 4: query_table.py subscription users --limit 20 --env dev
+```bash
+# Paso 1: Obtener credenciales (si no las tiene)
+# Paso 2: Schema ya conocido → subscription
+# Paso 3: Describir tabla
+python3 /root/.claude/skills/global66-db-ops/scripts/describe_table.py subscription users --env dev
+
+# Paso 4: Consultar
+python3 /root/.claude/skills/global66-db-ops/scripts/query_table.py subscription users --limit 20 --env dev
 ```
 
 **Ejemplo 2: Usuario dice "Busca todas las tablas que tengan 'customer' en su nombre"**
-```
-→ Paso 1: Obtener credenciales
-→ Paso 2: list_schemas.py (para listar todos)
-→ Paso 3: search_metadata.py "customer" --env dev
-→ Paso 4: describe_table.py para cada tabla encontrada
+```bash
+# Paso 1: Obtener credenciales
+# Paso 2: Listar esquemas si no los conoces
+python3 /root/.claude/skills/global66-db-ops/scripts/list_schemas.py --env dev
+
+# Paso 3: Buscar por patrón
+python3 /root/.claude/skills/global66-db-ops/scripts/search_metadata.py "customer" --env dev
+
+# Paso 4: Describir cada tabla encontrada
+python3 /root/.claude/skills/global66-db-ops/scripts/describe_table.py subscription customer_profile --env dev
 ```
 
 **Ejemplo 3: Usuario dice "Valida la estructura de la tabla payments después del cambio"**
-```
-→ Paso 1: Obtener credenciales
-→ Paso 2: Asumir schema conocido (si no, preguntar)
-→ Paso 3: describe_table.py subscription payments --env dev
-→ Paso 4: (Comparar con esquema esperado o mostrar al usuario)
+```bash
+# Paso 1: Obtener credenciales
+# Paso 2: Schema conocido → subscription
+# Paso 3: Describir tabla
+python3 /root/.claude/skills/global66-db-ops/scripts/describe_table.py subscription payments --env dev
+
+# Paso 4: Comparar con esquema esperado o mostrar al usuario
 ```
 
 ## Scripts Disponibles
 
-| Script | Uso | Ejemplo |
-|--------|-----|---------|
-| `list_schemas.py` | Listar todos los esquemas | `python3 scripts/list_schemas.py --env dev` |
-| `list_tables.py <schema>` | Listar tablas de un schema | `python3 scripts/list_tables.py subscription --env dev` |
-| `describe_table.py <schema> <table>` | Ver estructura (columnas, índices, claves) | `python3 scripts/describe_table.py subscription users --env dev` |
-| `query_table.py <schema> <table>` | Consultar datos con límite | `python3 scripts/query_table.py subscription users --limit 20 --env dev` |
-| `search_metadata.py <pattern>` | Buscar tablas/columnas por patrón | `python3 scripts/search_metadata.py "customer" --env dev` |
-| `backup_table.py <schema> <table>` | Respaldar tabla a archivo SQL | `python3 scripts/backup_table.py subscription users --env dev` |
-| `backup_schema.py <schema>` | Respaldar todo un schema | `python3 scripts/backup_schema.py subscription --env dev` |
+| Script | Ubicación | Uso | Ejemplo |
+|--------|-----------|-----|---------|
+| `list_schemas.py` | `/root/.claude/skills/global66-db-ops/scripts/` | Listar todos los esquemas | `python3 /root/.claude/skills/global66-db-ops/scripts/list_schemas.py --env dev` |
+| `list_tables.py` | `/root/.claude/skills/global66-db-ops/scripts/` | Listar tablas de un schema | `python3 /root/.claude/skills/global66-db-ops/scripts/list_tables.py subscription --env dev` |
+| `describe_table.py` | `/root/.claude/skills/global66-db-ops/scripts/` | Ver estructura (columnas, índices, claves) | `python3 /root/.claude/skills/global66-db-ops/scripts/describe_table.py subscription users --env dev` |
+| `query_table.py` | `/root/.claude/skills/global66-db-ops/scripts/` | Consultar datos con límite | `python3 /root/.claude/skills/global66-db-ops/scripts/query_table.py subscription users --limit 20 --env dev` |
+| `search_metadata.py` | `/root/.claude/skills/global66-db-ops/scripts/` | Buscar tablas/columnas por patrón | `python3 /root/.claude/skills/global66-db-ops/scripts/search_metadata.py "customer" --env dev` |
+| `backup_table.py` | `/root/.claude/skills/global66-db-ops/scripts/` | Respaldar tabla a archivo SQL | `python3 /root/.claude/skills/global66-db-ops/scripts/backup_table.py subscription users --env dev` |
+| `backup_schema.py` | `/root/.claude/skills/global66-db-ops/scripts/` | Respaldar todo un schema | `python3 /root/.claude/skills/global66-db-ops/scripts/backup_schema.py subscription --env dev` |
 
 ## Reglas de Seguridad y Estándares
 
