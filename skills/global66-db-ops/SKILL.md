@@ -17,24 +17,25 @@ description: >
 
 Esta skill proporciona un flujo de trabajo estándar para interactuar con las bases de datos de Global66 (entornos CI/DEV), integrando la obtención de credenciales desde el Config Server y la exploración de datos mediante scripts especializados.
 
-## 📍 Ubicación de Scripts
+## 📍 Scripts Python
 
-Los scripts Python se encuentran en:
-```
-/root/.claude/skills/global66-db-ops/scripts/
-├── list_schemas.py
-├── list_tables.py
-├── describe_table.py
-├── query_table.py
-├── search_metadata.py
-├── backup_table.py
-├── backup_schema.py
-└── utils/
-    ├── db_connect.py
-    └── constants.py
+Los scripts Python están documentados completamente en `references/scripts-reference.md`.
+
+**Opción 1: Usar desde instalación global** (si tienes acceso a `/root/.claude/skills/`)
+```bash
+python3 /root/.claude/skills/global66-db-ops/scripts/list_schemas.py --env dev
 ```
 
-**IMPORTANTE**: Todos los comandos deben usar la ruta completa: `/root/.claude/skills/global66-db-ops/scripts/script_name.py`
+**Opción 2: Copiar scripts a tu repo local** (recomendado para portabilidad)
+```bash
+# Copia los scripts de references/scripts-reference.md a ./scripts/
+mkdir -p ./scripts/utils
+
+# Luego ejecuta con rutas relativas:
+python3 ./scripts/list_schemas.py --env dev
+```
+
+Ver `references/scripts-reference.md` para instrucciones completas de setup y documentación de todos los scripts.
 
 ## Cuándo usar esta skill
 
