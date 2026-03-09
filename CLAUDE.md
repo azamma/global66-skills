@@ -10,26 +10,41 @@ This is a **Claude Code skills repository** for Global66 Java microservices deve
 
 ```
 /mnt/c/repos/global66-skills/
-├── skills/global66-java-dev/           # Main skill definition
-│   ├── SKILL.md                        # ~590 lines - core skill with architecture rules
-│   ├── evals/evals.json                # 12 evaluation test cases (IDs 1-12)
-│   └── references/                     # 11 specialized reference documents
-│       ├── srp-patterns.md             # Semantic naming (ensure*, fetch*, guard*)
-│       ├── transactional.md            # @Transactional rules + audit workflow
-│       ├── logging.md                  # SGSI-POL-005 logging compliance
-│       ├── sqs.md                      # SQS config + 4 traceability classes
-│       ├── swagger.md                  # OpenAPI/Swagger guidelines
-│       ├── liquibase.md                # G81-POL-033 DB migration rules
-│       ├── api-client.md               # Retrofit client generation (9 files)
-│       ├── tests.md                    # Unit test patterns (Given_When_Then)
-│       ├── checklist.md                # Pre-submission 40+ item checklist
-│       ├── cache.md                    # Redis/Caffeine caching guidelines
-│       ├── api-rest.md                 # REST API naming and structure
-│       └── exceptions.md               # ApiRestException, ErrorReason, ErrorSource
-├── skills/global66-java-sonar-expert/  # Specialized Sonar skill
-│   ├── SKILL.md                        # Instructions for Sonar review & fixes
-│   ├── assets/sonar_rules.xml          # MS Base profile rules
-│   └── references/sonar-patterns.md    # Mapping Sonar rules to G66 patterns
+├── skills/
+│   ├── global66-java-dev/              # Main skill - Java microservices development
+│   │   ├── SKILL.md                    # ~590 lines - core skill with architecture rules
+│   │   ├── evals/evals.json            # 12 evaluation test cases (IDs 1-12)
+│   │   └── references/                 # 11 specialized reference documents
+│   │       ├── srp-patterns.md         # Semantic naming (ensure*, fetch*, guard*)
+│   │       ├── transactional.md        # @Transactional rules + audit workflow
+│   │       ├── logging.md              # SGSI-POL-005 logging compliance
+│   │       ├── sqs.md                  # SQS config + 4 traceability classes
+│   │       ├── swagger.md              # OpenAPI/Swagger guidelines
+│   │       ├── liquibase.md            # G81-POL-033 DB migration rules
+│   │       ├── api-client.md           # Retrofit client generation (9 files)
+│   │       ├── tests.md                # Unit test patterns (Given_When_Then)
+│   │       ├── checklist.md            # Pre-submission 40+ item checklist
+│   │       ├── cache.md                # Redis/Caffeine caching guidelines
+│   │       ├── api-rest.md             # REST API naming and structure
+│   │       └── exceptions.md           # ApiRestException, ErrorReason, ErrorSource
+│   ├── global66-db-ops/                # Database operations skill
+│   │   ├── SKILL.md                    # MySQL exploration & query tool
+│   │   ├── evals/evals.json            # 7 evaluation test cases
+│   │   ├── scripts/                    # Python utilities for DB operations
+│   │   │   ├── list_schemas.py         # List available schemas
+│   │   │   ├── list_tables.py          # List tables in a schema
+│   │   │   ├── describe_table.py       # Show table structure (columns, keys, indexes)
+│   │   │   ├── query_table.py          # Query with safe limits and CSV export
+│   │   │   ├── search_metadata.py      # Search tables/columns by pattern
+│   │   │   ├── backup_table.py         # Backup single table to SQL
+│   │   │   ├── backup_schema.py        # Backup entire schema
+│   │   │   └── utils/                  # Connection utilities and constants
+│   │   └── references/
+│   │       └── troubleshooting.md      # Common errors and solutions
+│   └── global66-java-sonar-expert/     # Specialized Sonar code review skill
+│       ├── SKILL.md                    # Instructions for Sonar review & fixes
+│       ├── assets/sonar_rules.xml      # MS Base profile rules
+│       └── references/sonar-patterns.md # Mapping Sonar rules to G66 patterns
 ├── global66-java-dev-workspace/        # Evaluation workspaces
 │   └── iteration-1/                    # A/B test results (7 scenarios)
 │       ├── endpoint-generation/        # Eval 1: Create endpoint (with vs without skill)
@@ -169,9 +184,41 @@ When running evals, follow this pattern:
 | 11 | API client generation | Retrofit 9-file pattern, mappers, config |
 | 12 | SonarQube resolution | Cognitive complexity, SRP mapping |
 
+## Global66 Database Operations Skill (global66-db-ops)
+
+This skill provides safe access to CI/DEV MySQL databases for Global66 projects. Use it when:
+- **Querying data**: "Dame los últimos 20 registros de la tabla X"
+- **Validating schema changes**: "Revisa la estructura de la tabla Y después del cambio Liquibase"
+- **Searching metadata**: "Qué tablas contienen la columna 'status'?"
+- **Debugging persistence errors**: "¿Por qué esta ForeignKeyException?"
+- **Auditing migrations**: "Qué cambios se aplicaron a la base de datos?"
+- **Exporting data**: "Necesito los datos de la tabla Z en CSV"
+
+### Key Features
+- **Safe Protocol**: Research → Explore → Query (4-step workflow)
+- **7 Python scripts** for schema exploration, querying, searching, and backups
+- **Security-first**: Credentials via environment variables, safe limits, SQL injection prevention
+- **Troubleshooting guide**: Common errors and solutions in `references/troubleshooting.md`
+- **7 evaluation test cases** in `evals/evals.json`
+
+### Usage Example
+```bash
+# Step 1: Get credentials (if needed)
+curl -s https://lb-dev.global66.com/config/subscription/dev | grep datasource
+
+# Step 2-3: Explore schema and describe table
+python3 scripts/describe_table.py subscription users --env dev
+
+# Step 4: Query with limits
+python3 scripts/query_table.py subscription users --limit 20 --env dev
+```
+
+### Installation
+Global installation: `/root/.claude/skills/global66-db-ops/`
+
 ## Skill Development Guidelines
 
-When modifying the skill:
+When modifying any skill:
 
 1. **Update SKILL.md** frontmatter description if trigger conditions change
 2. **Add reference docs** for new domains (currently has 12)

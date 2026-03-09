@@ -10,7 +10,10 @@
       "Bash(ls:*)",
       "mcp__plugin_claude-mem_mcp-search__save_memory",
       "Bash(cp:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(cp -r /mnt/c/repos/global66-skills/skills/global66-db-ops /root/.claude/skills/)",
+      "Read(//root/.claude/skills/**)"
     ]
   }
 }
