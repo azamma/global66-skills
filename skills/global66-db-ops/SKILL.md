@@ -21,21 +21,25 @@ Esta skill proporciona un flujo de trabajo estándar para interactuar con las ba
 
 Los scripts Python están documentados completamente en `references/scripts-reference.md`.
 
-**Opción 1: Usar desde instalación global** (si tienes acceso a `/root/.claude/skills/`)
-```bash
-python3 /root/.claude/skills/global66-db-ops/scripts/list_schemas.py --env dev
-```
+Para usar los scripts:
 
-**Opción 2: Copiar scripts a tu repo local** (recomendado para portabilidad)
-```bash
-# Copia los scripts de references/scripts-reference.md a ./scripts/
-mkdir -p ./scripts/utils
+1. **Lee `references/scripts-reference.md`** — contiene el código completo de todos los scripts
+2. **Copia los scripts a tu repo local:**
+   ```bash
+   mkdir -p ./scripts/utils
+   # Copia el código de scripts-reference.md a estos archivos
+   ```
+3. **Configura credenciales en `.env`** (ver instrucciones en scripts-reference.md)
+4. **Ejecuta desde tu repo:**
+   ```bash
+   python3 ./scripts/list_schemas.py --env dev
+   ```
 
-# Luego ejecuta con rutas relativas:
-python3 ./scripts/list_schemas.py --env dev
-```
-
-Ver `references/scripts-reference.md` para instrucciones completas de setup y documentación de todos los scripts.
+**IMPORTANTE**:
+- ❌ NO uses rutas globales como `/root/.claude/skills/...`
+- ❌ NO expongas credenciales en prompts
+- ✅ Usa `.env` file para credenciales
+- ✅ Copia los scripts a tu carpeta local
 
 ## Cuándo usar esta skill
 
@@ -71,65 +75,55 @@ Si el usuario no proporciona credenciales explícitamente:
 ### 2️⃣ Exploración de Esquema (Si es desconocido)
 
 Si el usuario no menciona el schema:
-- Lista esquemas: `python3 /root/.claude/skills/global66-db-ops/scripts/list_schemas.py --env {env}`
-- Una vez identificado el schema, lista tablas: `python3 /root/.claude/skills/global66-db-ops/scripts/list_tables.py {schema} --env {env}`
+- **Guía al usuario** a usar `list_schemas.py` (ver `references/scripts-reference.md`)
+- Una vez identificado el schema, guía a usar `list_tables.py`
 
 Si el usuario ya mencionó el schema (ej: "subscription"), salta a paso 3.
 
 ### 3️⃣ Análisis de Estructura
 
 Antes de consultar datos:
-- Describe la tabla: `python3 /root/.claude/skills/global66-db-ops/scripts/describe_table.py {schema} {table} --env {env}`
-- Esto muestra columnas, tipos, claves primarias e índices
-- Si hay relaciones con otras tablas, describilas también
+- **Guía al usuario** a usar `describe_table.py` para ver estructura
+- Esto mostrará columnas, tipos, claves primarias e índices
+- Si hay relaciones con otras tablas, sugiere describir también esas
 
 ### 4️⃣ Consulta de Datos
 
-Ejecuta la consulta con límites seguros:
-```bash
-python3 /root/.claude/skills/global66-db-ops/scripts/query_table.py {schema} {table} --limit 10 --env {env}
-```
+**Guía al usuario** a usar `query_table.py`:
+- Con límite (default 10)
+- Con `--limit` personalizado (máx. 1000)
+- Con `--export` para CSV
 
-**Variaciones**:
-- Aumenta `--limit` si el usuario solicita más registros (máx. 1000 para evitar saturación)
-- Usa `--export` si el usuario pide CSV con `--export`
-- Busca por patrón: `python3 /root/.claude/skills/global66-db-ops/scripts/search_metadata.py {pattern} --env {env}`
+Todos los scripts están documentados en `references/scripts-reference.md` con ejemplos de uso.
 
 ## Ejemplos de uso
 
 **Ejemplo 1: Usuario dice "Dame los últimos 20 registros de la tabla users en dev"**
-```bash
-# Paso 1: Obtener credenciales (si no las tiene)
-# Paso 2: Schema ya conocido → subscription
-# Paso 3: Describir tabla
-python3 /root/.claude/skills/global66-db-ops/scripts/describe_table.py subscription users --env dev
 
-# Paso 4: Consultar
-python3 /root/.claude/skills/global66-db-ops/scripts/query_table.py subscription users --limit 20 --env dev
-```
+→ Paso 1: Obtener credenciales (si no las tiene)
+→ Paso 2: Schema ya conocido → subscription
+→ Paso 3: Guiar a usar `describe_table.py subscription users --env dev`
+→ Paso 4: Guiar a usar `query_table.py subscription users --limit 20 --env dev`
+
+(Ver `references/scripts-reference.md` para código completo)
 
 **Ejemplo 2: Usuario dice "Busca todas las tablas que tengan 'customer' en su nombre"**
-```bash
-# Paso 1: Obtener credenciales
-# Paso 2: Listar esquemas si no los conoces
-python3 /root/.claude/skills/global66-db-ops/scripts/list_schemas.py --env dev
 
-# Paso 3: Buscar por patrón
-python3 /root/.claude/skills/global66-db-ops/scripts/search_metadata.py "customer" --env dev
+→ Paso 1: Obtener credenciales
+→ Paso 2: Guiar a usar `list_schemas.py --env dev` si no conoce esquemas
+→ Paso 3: Guiar a usar `search_metadata.py "customer" --type table --env dev`
+→ Paso 4: Para cada tabla encontrada, guiar a usar `describe_table.py`
 
-# Paso 4: Describir cada tabla encontrada
-python3 /root/.claude/skills/global66-db-ops/scripts/describe_table.py subscription customer_profile --env dev
-```
+(Ver `references/scripts-reference.md` para código completo)
 
 **Ejemplo 3: Usuario dice "Valida la estructura de la tabla payments después del cambio"**
-```bash
-# Paso 1: Obtener credenciales
-# Paso 2: Schema conocido → subscription
-# Paso 3: Describir tabla
-python3 /root/.claude/skills/global66-db-ops/scripts/describe_table.py subscription payments --env dev
 
-# Paso 4: Comparar con esquema esperado o mostrar al usuario
-```
+→ Paso 1: Obtener credenciales
+→ Paso 2: Schema conocido → subscription
+→ Paso 3: Guiar a usar `describe_table.py subscription payments --env dev`
+→ Paso 4: Comparar con esquema esperado o mostrar al usuario
+
+(Ver `references/scripts-reference.md` para código completo)
 
 ## Scripts Disponibles
 
