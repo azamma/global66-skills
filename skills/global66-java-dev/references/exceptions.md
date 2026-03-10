@@ -257,18 +257,18 @@ public interface CustomerController {
 
 When you need domain-specific errors not available in the library:
 
-### Step 1: Use TODO Comments with Generic Errors
+### Step 1: Use Generic Errors Temporarily
 
-**DO NOT create local enums** in your microservice. All errors must come from the shared library. Use generic errors with TODO comments:
+**DO NOT create local enums** in your microservice. All errors must come from the shared library. Use the closest generic error while waiting for the specific one:
 
 ```java
-// TODO: SUBSCRIPTION_BENEFIT_ALREADY_EXISTS (CONFLICT)
+// Temporary: Use generic CONFLICT until SUBSCRIPTION_BENEFIT_ALREADY_EXISTS is available
 throw ApiRestException.builder()
     .reason(ErrorReason.CONFLICT)  // Generic - replace once library is updated
     .source(ErrorSource.BUSINESS_SERVICE)
     .build();
 
-// TODO: SUBSCRIPTION_BUSINESS_NOT_FOUND (NOT_FOUND)
+// Temporary: Use generic NOT_FOUND until SUBSCRIPTION_BUSINESS_NOT_FOUND is available
 throw ApiRestException.builder()
     .reason(ErrorReason.NOT_FOUND)
     .source(ErrorSource.BUSINESS_SERVICE)
@@ -379,12 +379,11 @@ Once the architecture team adds the errors to the shared library:
 
 1. Update your `pom.xml` (or `build.gradle`) to the new library version
 2. Replace generic error with specific `ErrorReason.XXX`
-3. Remove the TODO comment
-4. Update `ErrorSource` if a new specific one was created
+3. Update `ErrorSource` if a new specific one was created
 
 **Before:**
 ```java
-// TODO: SUBSCRIPTION_BENEFIT_ALREADY_EXISTS (CONFLICT)
+// Temporary: using generic CONFLICT
 throw ApiRestException.builder()
     .reason(ErrorReason.CONFLICT)
     .source(ErrorSource.BUSINESS_SERVICE)
@@ -435,4 +434,3 @@ When requesting new errors from architecture team:
 - [ ] Description follows format: "Error response when [condition]."
 - [ ] Description is clear and descriptive
 - [ ] ErrorSource matches existing values or follows naming convention
-- [ ] TODO comments in code reference the exact ErrorReason name needed

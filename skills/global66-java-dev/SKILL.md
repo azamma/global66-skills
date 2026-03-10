@@ -88,9 +88,32 @@ com.global.{domain}/
 9. **Only `ApiRestException` is allowed** — `new RuntimeException()`, `new Exception()`, `new IllegalArgumentException()`, or any other raw exception type is STRICTLY FORBIDDEN. Every exception must use `ApiRestException.builder()` with `ErrorReason` and `ErrorSource`.
 10. **Repositories must avoid multiple joins** — keep queries simple and performant.
 
+## Workflow Gates (MANDATORY)
+
+Before executing any task, identify the type and read the required references:
+
+| If the task involves... | You MUST read first |
+|-------------------------|---------------------|
+| Service code with `@Transactional` | `references/transactional.md` |
+| Generating tests | `references/tests.md` |
+| Creating API client (Retrofit) | `references/api-client.md` |
+| Creating Liquibase migration | `references/liquibase.md` |
+| Configuring SQS | `references/sqs.md` |
+| Repository/projection patterns | `references/repositories.md` |
+| Implementing cache | `references/cache.md` |
+| Creating REST endpoints | `references/api-rest.md` |
+| Reviewing git diff | Reference for the domain being reviewed |
+
+### Final Gate (no exceptions)
+
+**Before delivering ANY generated code:**
+1. Read `references/checklist.md`
+2. Verify every applicable item
+3. Report to user: "Checklist verified: X/Y applicable items, Z corrected"
+
 ## @Transactional Rules
 
-For full rules, examples, and audit output format (git diff reviews), see `references/transactional.md`.
+**Workflow:** If generating or modifying code with `@Transactional`, read `references/transactional.md` BEFORE writing code.
 
 | Rule | Requirement |
 |------|-------------|
@@ -204,8 +227,10 @@ public interface UserMapper {
 
 ### Client Layer (Retrofit)
 
-For the complete file-by-file generation guide (all 9 files + 3 config updates), see
-`references/api-client.md`. Ask the user for 4 inputs and infer the rest.
+**Mandatory workflow for API clients:**
+1. Read `references/api-client.md` in full (9 files + 3 config updates)
+2. Ask user for the 4 required inputs
+3. Generate following the document's order
 
 **Key patterns:**
 
@@ -290,26 +315,7 @@ throw ApiRestException.builder()
 - Account: `ACCOUNT_NOT_FOUND`, `INSUFFICIENT_BALANCE`, `ACCOUNT_IS_CLOSED`
 - Beneficiary: `BENEFICIARY_NOT_FOUND`, `BENEFICIARY_ALREADY_EXISTS`
 
-### Custom Errors
-
-When domain-specific errors don't exist in the library:
-
-1. **DO NOT create local enums** — use generic errors with TODO comment
-2. **Add TODO with error code**: `// TODO: CUSTOMER_PLAN_NOT_FOUND (NOT_FOUND)`
-3. **Request architecture team** to add the error to the shared library
-4. **Update after library release**: Replace generic error with specific `ErrorReason`
-
-```java
-// TODO: CUSTOMER_PLAN_NOT_FOUND (NOT_FOUND)
-throw ApiRestException.builder()
-    .reason(ErrorReason.NOT_FOUND)  // Generic - replace once available
-    .source(ErrorSource.BUSINESS_SERVICE)
-    .build();
-```
-
-> **Naming Convention for ErrorReason:** `{DOMAIN}_{ENTITY}_{CONDITION}` in UPPER_SNAKE_CASE
-> - Examples: `SUBSCRIPTION_BENEFIT_ALREADY_EXISTS`, `SUBSCRIPTION_BUSINESS_NOT_FOUND`
-> - See `references/exceptions.md` for complete guidelines on requesting new errors from architecture team
+For custom errors not in the library, see `references/exceptions.md` for the architecture team request process.
 
 ## Method Structure Rules
 
@@ -359,46 +365,15 @@ public class UserEntity {
 
 ## Repository Patterns
 
-When creating repository methods, **never return the full Entity**. Choose the appropriate return type based on use case:
+**Workflow:** For projection patterns and persistence port examples, see `references/repositories.md`.
 
-| Use Case | Return Type | Example |
-|----------|-------------|---------|
-| Single attribute | `Optional<T>` | `Optional<Integer> findUserIdByEmail(String email)` |
-| Multiple attributes | Projection record | `Optional<UserInfoData> findUserInfoById(Integer id)` |
-| Full entity needed | Domain object via Persistence | `Optional<UserData> findById(Integer id)` |
+**Core rule:** Never return `*Entity` from repository methods — use projections or domain objects via `*Persistence` ports.
 
-### Projection Records
-
-For queries returning multiple fields but not the full entity, define a record in the same repository file or as a top-level class:
-
-```java
-public interface UserRepository extends JpaRepository<UserEntity, Integer> {
-
-    // Single attribute - Optional<T>
-    @Query("SELECT u.id FROM UserEntity u WHERE u.email = :email")
-    Optional<Integer> findUserIdByEmail(String email);
-
-    // Multiple attributes - Projection record
-    @Query("SELECT u.id, u.email, u.status FROM UserEntity u WHERE u.id = :id")
-    Optional<UserInfoData> findUserInfoById(Integer id);
-
-    // Record projection - defined inside repository or separately
-    record UserInfoData(Integer id, String email, UserStatusEnum status) {}
-}
-```
-
-### Rules
-
-| Rule | Requirement |
-|------|-------------|
-| `REPO_NO_ENTITY_RETURN` | Never return `Entity` from repository methods — always use projections or domain objects |
-| `REPO_SINGLE_ATTR` | Single attribute queries → return `Optional<T>` (Integer, String, Boolean, etc.) |
-| `REPO_MULTI_ATTR` | Multiple attributes → return `Optional<RecordProjection>` with descriptive name |
-| `REPO_RECORD_NAMING` | Projection records named `{Entity}{Purpose}Data` or `{Purpose}Data` (e.g., `UserSummaryData`, `UserInfoData`) |
-| `REPO_LIST_PROJECTION` | List queries can return `List<Projection>` — still no entities |
-| `REPO_NO_MANY_JOINS` | Avoid complex queries with multiple joins. Keep them efficient. |
-
-> **Why:** Returning entities couples the query result to the persistence layer, bypassing the hexagonal architecture. Projections are lightweight, immutable, and follow SRP.
+| Use Case | Return Type |
+|----------|-------------|
+| Single attribute | `Optional<T>` (Integer, String, etc.) |
+| Multiple attributes | `Optional<ProjectionRecord>` |
+| Full entity needed | Domain object via `*Persistence` port |
 
 ## Unit Tests
 
@@ -406,7 +381,7 @@ public interface UserRepository extends JpaRepository<UserEntity, Integer> {
 > Tests son secundarios. Antes de escribir tests, preguntar:
 > ¿Querés los tests ahora o después? ¿Es desde un diff o una clase puntual? ¿Ya existe el archivo de test?
 
-For full testing guide, coverage requirements, and examples, see `references/tests.md`.
+**Workflow:** Before generating tests, read `references/tests.md` for coverage requirements and patterns.
 
 **Rules:** Name = `Given_When_Then` · `@Nested` per method · 4 types (Happy/Negative/Edge/Branch) · DTOs from JSON only · AssertJ · no comments · explicit imports · git diff: new/modified scope only, never overwrite.
 
@@ -416,7 +391,7 @@ SonarQube code reviews, coverage gap analysis, and issue resolution are now hand
 
 ## SQS Configuration
 
-For the complete Gold Standard code (SqsClientConfig, TracingMessageListenerWrapper, TracingSqsEndpoint, TracingSqsListenerAnnotationBeanPostProcessor, MdcTaskDecorator) and all rules, see `references/sqs.md`.
+**Workflow:** Before configuring SQS, read `references/sqs.md` for the complete Gold Standard code (all 4 traceability classes must be copied exactly).
 
 ### 4 Required Classes (copy as-is, change only the package)
 
@@ -426,55 +401,6 @@ For the complete Gold Standard code (SqsClientConfig, TracingMessageListenerWrap
 | `TracingMessageListenerWrapper` | Extracts `traceId` from incoming message header → MDC, removes in `finally` |
 | `TracingSqsEndpoint` | Overrides `createMessageListenerInstance` to wrap with `TracingMessageListenerWrapper` |
 | `TracingSqsListenerAnnotationBeanPostProcessor` | Overrides `createEndpoint` to use `TracingSqsEndpoint` |
-
-### Consumer Pattern
-
-```java
-@Slf4j @Component @RequiredArgsConstructor
-public class OrderQueueListenerImpl implements OrderQueueListener {
-    private final OrderService orderService;
-
-    @Override
-    @SqsListener(value = "${com.global.{domain}.queue.sqs.order.url}")
-    public void receiveMessage(String message) {
-        log.info("START - [receiveMessage] [SQS]: {}", message);
-        try {
-            OrderMessageDto dto = ObjectMapperUtils.loadObject(message, OrderMessageDto.class);
-            orderService.process(OrderMessageMapper.INSTANCE.toData(dto));
-        } catch (Exception e) {
-            log.error("Failed to process order message from SQS: {}", message, e);
-        }
-        log.info("END - [receiveMessage] [SQS]");
-    }
-}
-```
-
-### Producer Pattern (with traceId propagation)
-
-```java
-// Standard queue
-sqsTemplate.send(to -> to
-    .queue(queueUrl)
-    .payload(mapper.toMessage(data))
-    .header("traceId", MDC.get("traceId")));
-
-// FIFO queue — also requires messageGroupId and messageDeduplicationId
-sqsTemplate.send(to -> to
-    .queue(queueUrl)
-    .payload(mapper.toMessage(data))
-    .header("traceId", MDC.get("traceId"))
-    .header(SqsHeaders.MessageSystemAttributes.SQS_MESSAGE_GROUP_ID_HEADER, data.getGroupId())
-    .header(SqsHeaders.MessageSystemAttributes.SQS_MESSAGE_DEDUPLICATION_ID_HEADER,
-        data.getTransactionId()));
-```
-
-### Queue Naming Convention
-
-```
-{ms}-{action}-{env}           # Standard:  geolocation-events-dev
-{ms}-{action}-{env}.fifo      # FIFO:      transaction-geolocation-dev.fifo
-{ms}-{action}-{env}-dlq       # DLQ:      transaction-geolocation-dev-dlq
-```
 
 ## Logging (SGSI-POL-005)
 
@@ -494,93 +420,17 @@ For full details, examples, and the compliance review format, see `references/lo
 | Async | Executor must use `ContextSnapshot.captureAll().wrap(runnable)` task decorator |
 | CompletableFuture | Use `CompletableFutureHelper` to preserve MDC across threads |
 
-```java
-// Controller (correct)
-@GetMapping("/{userId}")
-public UserResponse getUser(@PathVariable Integer userId) {
-    log.info("START - [GET] [/users/{}]: userId={}", userId, userId);
-    // Single line return. No logic.
-    UserResponse response = UserPresentationMapper.INSTANCE.toResponse(userService.findUser(userId));
-    log.info("END - [GET] [/users/{}]", userId);
-    return response;
-}
-
-// Service (correct — business milestone only, no entry/exit)
-public UserData createUser(UserData userData) {
-    validateEmailIsAvailable(userData.getEmail());
-    UserData saved = userPersistence.save(userData);
-    log.info("User registered successfully: userId={}", saved.getId());
-    return saved;
-}
-
-// Error (correct)
-} catch (Exception e) {
-    log.error("Failed to process SQS message: transactionId={}", transactionId, e);
-}
-```
-
-### Log Compliance Review (git diff)
-
-When a user provides a `git diff` for log review, read `references/logging.md` for the
-full compliance check and output format. Analyze lines starting with `+`, classify by
-category (`SECURITY | FORMAT | ARCHITECTURE | NOISE`) and severity (`CRITICAL | WARNING`).
-
 ## Swagger / OpenAPI Documentation
 
-For complete examples and audit report format, see `references/swagger.md`.
+**Workflow:** Before creating or reviewing Swagger annotations, read `references/swagger.md`.
 
-**Core rule:** All Swagger annotations live on the **interface only**. The `@RestController`
-implementation has zero `@Tag`, `@Operation`, or `@Schema` annotations.
+**Core rule:** All Swagger annotations live on the **interface only**. The `@RestController` implementation has zero `@Tag`, `@Operation`, or `@Schema` annotations.
 
-### Interface annotations (mandatory)
-
-```java
-@Tag(name = "Payment", description = "Payment processing operations")
-public interface PaymentController {
-
-    @ErrorResponses(values = {
-        @ErrorResponse(reason = ErrorReason.NOT_FOUND, source = ErrorSource.BUSINESS_SERVICE),
-        @ErrorResponse(reason = ErrorResponse.CONFLICT, source = ErrorSource.HTTP_CLIENT_COMPONENT)
-    })
-    @Operation(summary = "Process a payment", description = "Validates and persists a new payment")
-    @SecurityRequirement(name = "authB2C")
-    PaymentResponse createPayment(
-        @Parameter(description = "User email", required = true, example = "user@global66.com")
-            @RequestHeader("Claim-Email") String email,
-        @RequestBody @Valid PaymentRequest request);
-}
-```
-
-### DTO annotations
-
-```java
-@Data
-@Schema(name = "PaymentRequest", description = "Payload for creating a payment")
-public class PaymentRequest {
-    @Schema(description = "Amount to transfer", requiredMode = REQUIRED, example = "1000")
-    private BigDecimal amount;
-}
-
-public record PaymentResponse(
-    @Schema(description = "Transaction ID", example = "TXN-2024-001") String txnId,
-    @Schema(description = "Status", example = "COMPLETED") String status) {}
-```
-
-### application.yml (required)
-```yaml
-springdoc:
-  api-docs:
-    path: /{serviceName}/api-docs
-  swagger-ui:
-    path: /{serviceName}/swagger-ui.html
-  override-with-generic-response: false
-```
-
-### Security schemes: `authB2C` | `authB2B` | `authAdmin`
+**Security schemes:** `authB2C` | `authB2B` | `authAdmin`
 
 ## Liquibase YAML (G81-POL-033)
 
-For the generation workflow, full rules, Gold Standard examples, and audit format, see `references/liquibase.md`.
+**Workflow:** Before creating or reviewing Liquibase migrations, read `references/liquibase.md` for G81-POL-033 compliance rules.
 
 **Generation workflow:** ask for the Jira ticket → run `mvn clean compile liquibase:diff -P liquibase -Dissue.name={TICKET}` → validate and fix the generated YAML (Liquibase generates non-compliant output by default).
 
@@ -596,7 +446,7 @@ For the generation workflow, full rules, Gold Standard examples, and audit forma
 
 ## Cache Guidelines
 
-For full rules, naming conventions, Redis/Caffeine configuration, and examples, see `references/cache.md`.
+**Workflow:** Before implementing caching, read `references/cache.md` for Redis/Caffeine configuration and naming conventions.
 
 | Rule | Requirement |
 |------|-------------|
@@ -613,7 +463,7 @@ For full rules, naming conventions, Redis/Caffeine configuration, and examples, 
 
 ## API REST Guidelines
 
-For full conventions, HTTP methods, URL structure, prefixes, and versioning rules, see `references/api-rest.md`.
+**Workflow:** Before creating REST endpoints, read `references/api-rest.md` for URL structure and prefix conventions.
 
 | Rule | Requirement |
 |------|-------------|
@@ -635,10 +485,21 @@ For full conventions, HTTP methods, URL structure, prefixes, and versioning rule
 - `notification` - Webhooks (API Key, separate API Gateway)
 - `cron` - Scheduled tasks (Event Bridge → Lambda)
 
-## Pre-Entrega Checklist
+## Pre-Delivery Gate (MANDATORY)
 
-Ver el checklist completo en `references/checklist.md` con 40+ ítems organizados por categoría:
-- Arquitectura (entities, streams, líneas por método)
-- @Transactional (layer, public, rollbackFor, readOnly, no external calls)
-- SRP & Naming (no métodos genéricos, factory exceptions, complejidad cognitiva)
-- MapStruct, API Clients, Testing, Logging, SQS, Liquibase, Swagger, Cache, API REST, Exception Handling
+**ALWAYS before delivering code:**
+
+1. Read `references/checklist.md`
+2. Verify ALL applicable items for your task
+3. Fix any violations found
+4. Report to user:
+
+```
+✅ Checklist verified
+- Items reviewed: X/40
+- Items N/A: Y
+- Violations corrected: Z
+```
+
+> This step is NOT optional. Code delivered without checklist verification
+> violates Global66 quality standards.
