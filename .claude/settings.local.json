@@ -14,7 +14,17 @@
       "Bash(git commit:*)",
       "Bash(cp -r /mnt/c/repos/global66-skills/skills/global66-db-ops /root/.claude/skills/)",
       "Read(//root/.claude/skills/**)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "WebFetch(domain:api.github.com)",
+      "Bash(BASE=\"https://raw.githubusercontent.com/anthropics/skills/main/skills/skill-creator\"\n\ncurl -sL \"$BASE/SKILL.md\" -o /root/.claude/skills/skill-creator/SKILL.md && echo \"SKILL.md ok\"\ncurl -sL \"$BASE/references/schemas.md\" -o /root/.claude/skills/skill-creator/references/schemas.md && echo \"schemas.md ok\"\ncurl -sL \"$BASE/agents/analyzer.md\" -o /root/.claude/skills/skill-creator/agents/analyzer.md && echo \"analyzer.md ok\"\ncurl -sL \"$BASE/agents/comparator.md\" -o /root/.claude/skills/skill-creator/agents/comparator.md && echo \"comparator.md ok\"\ncurl -sL \"$BASE/agents/grader.md\" -o /root/.claude/skills/skill-creator/agents/grader.md && echo \"grader.md ok\"\ncurl -sL \"$BASE/scripts/__init__.py\" -o /root/.claude/skills/skill-creator/scripts/__init__.py && echo \"__init__.py ok\"\ncurl -sL \"$BASE/scripts/aggregate_benchmark.py\" -o /root/.claude/skills/skill-creator/scripts/aggregate_benchmark.py && echo \"aggregate_benchmark.py ok\"\ncurl -sL \"$BASE/scripts/generate_report.py\" -o /root/.claude/skills/skill-creator/scripts/generate_report.py && echo \"generate_report.py ok\"\ncurl -sL \"$BASE/scripts/improve_description.py\" -o /root/.claude/skills/skill-creator/scripts/improve_description.py && echo \"improve_description.py ok\"\ncurl -sL \"$BASE/scripts/package_skill.py\" -o /root/.claude/skills/skill-creator/scripts/package_skill.py && echo \"package_skill.py ok\"\ncurl -sL \"$BASE/scripts/quick_validate.py\" -o /root/.claude/skills/skill-creator/scripts/quick_validate.py && echo \"quick_validate.py ok\"\ncurl -sL \"$BASE/scripts/run_eval.py\" -o /root/.claude/skills/skill-creator/scripts/run_eval.py && echo \"run_eval.py ok\"\ncurl -sL \"$BASE/scripts/run_loop.py\" -o /root/.claude/skills/skill-creator/scripts/run_loop.py && echo \"run_loop.py ok\"\ncurl -sL \"$BASE/scripts/utils.py\" -o /root/.claude/skills/skill-creator/scripts/utils.py && echo \"utils.py ok\")",
+      "Bash(cp -r /mnt/c/repos/global66-skills/skills/global66-java-dev/* /root/.claude/skills/global66-java-dev/ && echo \"Synced successfully\" && wc -l /root/.claude/skills/global66-java-dev/SKILL.md)",
+      "Bash(cp -r /mnt/c/repos/global66-skills/skills/global66-java-dev/* /root/.claude/skills/global66-java-dev/ && echo \"Synced successfully\")",
+      "Read(//root/.gemini/**)",
+      "Read(//root/.config/**)",
+      "Bash(ls -la ~/.gemini/ 2>/dev/null || gemini --help 2>/dev/null | head -30)",
+      "Bash(cp -r /mnt/c/repos/global66-skills/skills/global66-java-dev/* /root/.gemini/skills/global66-java-dev/ && echo \"Synced to Gemini CLI\" && wc -l /root/.gemini/skills/global66-java-dev/SKILL.md && ls /root/.gemini/skills/global66-java-dev/references/)",
+      "Bash(git push:*)",
+      "Bash(gh auth:*)"
     ]
   }
 }
